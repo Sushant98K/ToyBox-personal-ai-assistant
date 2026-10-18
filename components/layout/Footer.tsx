@@ -12,7 +12,7 @@ import {
 
 export function Footer() {
   return (
-    <footer className="w-full bg-[#141414] text-white rounded-t-[24px] pt-16 pb-12 px-6 sm:px-12 mt-12">
+    <footer className="w-full bg-[#141414] dark:bg-[var(--canvas-soft)] text-white dark:text-[var(--ink)] rounded-t-[24px] border-t border-[var(--hairline)]/40 pt-16 pb-12 px-6 sm:px-12 mt-12 transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-14 border-b border-white/10">
           {/* Brand Column (Span 5) */}

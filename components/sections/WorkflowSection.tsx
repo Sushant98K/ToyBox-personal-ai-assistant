@@ -21,7 +21,7 @@ export function WorkflowSection() {
             (Icon, idx) => (
               <div
                 key={idx}
-                className="w-10 h-10 bg-white border border-[#e0e0e0] flex items-center justify-center transition-transform hover:scale-110"
+                className="w-10 h-10 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center transition-transform hover:scale-110"
                 style={{ borderRadius: "30%" }}
               >
                 <Icon size={20} />
@@ -38,12 +38,12 @@ export function WorkflowSection() {
         "Our specialized agents cluster threads by subject and urgency. Senders who need immediate input are flagged; low-priority chatter is condensed into executive digests.",
       badge: "Autonomous AI Engine",
       mock: (
-        <div className="bg-white p-3.5 rounded-[16px] border border-[#e0e0e0]/70 text-xs text-[#141414] space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-[600] text-[#707070]">
+        <div className="bg-[var(--canvas)] p-3.5 rounded-[16px] border border-[var(--hairline)] text-xs text-[var(--ink)] space-y-2">
+          <div className="flex items-center justify-between text-[11px] font-[600] text-[var(--text-muted)]">
             <span>Continuous Triage</span>
-            <span className="text-emerald-600">Active</span>
+            <span className="text-emerald-500">Active</span>
           </div>
-          <div className="p-2 rounded-[8px] bg-[#f3f3f3] text-[11px] font-[450]">
+          <div className="p-2 rounded-[8px] bg-[var(--canvas-soft)] text-[11px] font-[450] text-[var(--ink)]">
             Incoming 42 messages → 3 critical decisions identified
           </div>
         </div>
@@ -57,10 +57,10 @@ export function WorkflowSection() {
       badge: "One-Tap Action",
       mock: (
         <div className="flex items-center gap-2 pt-1">
-          <div className="flex-1 bg-white p-2.5 rounded-[12px] border border-[#e0e0e0] text-center">
-            <span className="text-xs font-[650] text-[#141414]">Draft Approved</span>
+          <div className="flex-1 bg-[var(--canvas)] p-2.5 rounded-[12px] border border-[var(--hairline)] text-center">
+            <span className="text-xs font-[650] text-[var(--ink)]">Draft Approved</span>
           </div>
-          <div className="flex-1 bg-[#141414] text-white p-2.5 rounded-[12px] text-center">
+          <div className="flex-1 bg-[var(--primary)] text-[var(--on-primary)] p-2.5 rounded-[12px] text-center">
             <span className="text-xs font-[650]">Calendar Synced</span>
           </div>
         </div>
@@ -69,16 +69,16 @@ export function WorkflowSection() {
   ];
 
   return (
-    <section id="workflow" className="py-20 md:py-28 px-4 sm:px-6 bg-[#f3f3f3]">
+    <section id="workflow" className="py-20 md:py-28 px-4 sm:px-6 bg-[var(--canvas-soft)] border-y border-[var(--hairline-soft)] transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-16">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-xs font-[600] text-[#141414] mb-4">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--canvas)] text-xs font-[600] text-[var(--ink)] mb-4 border border-[var(--hairline)]">
             Workflow Architecture
           </span>
-          <h2 className="text-3xl sm:text-4xl md:text-[44px] font-[650] text-[#141414] leading-[1.13] tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-[44px] font-[650] text-[var(--ink)] leading-[1.13] tracking-tight">
             How Toybox transforms your day.
           </h2>
-          <p className="mt-4 text-lg text-[#707070] font-[300] leading-[1.38]">
+          <p className="mt-4 text-lg text-[var(--text-muted)] font-[300] leading-[1.38]">
             From fractured communication silos to a calm, unified briefing stream in three simple steps.
           </p>
         </div>
@@ -87,26 +87,26 @@ export function WorkflowSection() {
           {steps.map((item, index) => (
             <div
               key={index}
-              className="bg-white rounded-[24px] p-6 sm:p-7 border border-[#e0e0e0]/60 flex flex-col justify-between transition-all hover:border-[#141414]/30"
+              className="bg-[var(--canvas)] rounded-[24px] p-6 sm:p-7 border border-[var(--hairline)] flex flex-col justify-between transition-all hover:border-[var(--ink)]/30"
             >
               <div>
                 <div className="flex items-center justify-between mb-5">
-                  <span className="text-xs font-[650] text-[#707070] bg-[#f3f3f3] px-3 py-1 rounded-full">
+                  <span className="text-xs font-[650] text-[var(--text-muted)] bg-[var(--canvas-soft)] px-3 py-1 rounded-full border border-[var(--hairline-soft)]">
                     {item.step}
                   </span>
-                  <span className="text-[11px] font-[600] text-[#141414] bg-[#f3f3f3] px-2.5 py-1 rounded-full">
+                  <span className="text-[11px] font-[600] text-[var(--ink)] bg-[var(--canvas-soft)] px-2.5 py-1 rounded-full border border-[var(--hairline-soft)]">
                     {item.badge}
                   </span>
                 </div>
-                <h3 className="text-xl font-[650] text-[#141414] leading-snug">
+                <h3 className="text-xl font-[650] text-[var(--ink)] leading-snug">
                   {item.title}
                 </h3>
-                <p className="mt-3 text-sm text-[#707070] font-[450] leading-relaxed">
+                <p className="mt-3 text-sm text-[var(--text-muted)] font-[450] leading-relaxed">
                   {item.description}
                 </p>
               </div>
 
-              <div className="mt-8 pt-4 border-t border-[#f0f0f0]">
+              <div className="mt-8 pt-4 border-t border-[var(--hairline-soft)]">
                 {item.mock}
               </div>
             </div>
