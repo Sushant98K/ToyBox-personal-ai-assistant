@@ -1,4 +1,4 @@
-# Toybox – Task Optimization & Yield Bot for Operations and eXecution
+# ToyBox.ai – Task Optimization & Yield Bot for Operations and eXecution
 
 An autonomous AI intelligence engine that unifies **Gmail, Slack, WhatsApp, Telegram, and Microsoft Outlook** to deliver executive morning briefings, real-time thread synthesis, and autonomous reminders.
 

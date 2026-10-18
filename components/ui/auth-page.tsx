@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './button';
 import { Input } from './input';
+import { AgentWaveLoader } from './agent-wave-loader';
 import { cn } from '@/lib/utils';
 import { insforge } from '@/lib/insforge';
 import {
@@ -33,7 +35,7 @@ interface AuthPageProps {
 
 export function AuthPage(props: AuthPageProps) {
   return (
-    <React.Suspense fallback={<div className="min-h-screen bg-[var(--canvas)] flex items-center justify-center"><Loader2Icon className="size-6 animate-spin text-[var(--ink)]" /></div>}>
+    <React.Suspense fallback={<div className="min-h-screen bg-[var(--canvas)] flex items-center justify-center"><AgentWaveLoader label="Loading authentication…" /></div>}>
       <AuthPageContent {...props} />
     </React.Suspense>
   );
@@ -307,12 +309,14 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         {/* Brand Lockup */}
         <div className="z-10 flex items-center gap-2.5">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div
-              className="w-8 h-8 bg-[var(--ink)] text-[var(--canvas)] flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-              style={{ borderRadius: '30%' }}
-            >
-              <SparklesIcon className="w-4 h-4 text-[var(--canvas)]" />
-            </div>
+            <Image
+              src="/logos/ToyBox-Logo.png"
+              alt="ToyBox.ai"
+              width={55}
+              height={55}
+              className="w-12 h-12 sm:w-12 sm:h-12 object-contain shrink-0 transition-transform group-hover:scale-105"
+              priority
+            />
             <p className="text-xl font-bold tracking-tight text-[var(--ink)]">
               {siteConfig.name}
             </p>
@@ -329,7 +333,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         <div className="z-10 mt-auto rounded-[24px] border border-[var(--hairline-soft)] bg-[var(--raised)]/80 p-6 backdrop-blur-md">
           <blockquote className="space-y-3">
             <p className="text-base sm:text-lg font-normal text-[var(--ink)] leading-relaxed">
-              &ldquo;My biggest dread every morning was opening WhatsApp to find 80 messages alongside 200 unread Slack notifications. Toybox synthesizes everything into an executive brief by 7:30 AM.&rdquo;
+              &ldquo;My biggest dread every morning was opening WhatsApp to find 80 messages alongside 200 unread Slack notifications. ToyBox.ai synthesizes everything into an executive brief by 7:30 AM.&rdquo;
             </p>
             <footer className="flex items-center gap-3 pt-2 border-t border-[var(--hairline)]">
               <div
@@ -362,12 +366,14 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         <div className="mx-auto w-full max-w-sm space-y-6">
           {/* Mobile Brand Mark */}
           <div className="flex items-center gap-2.5 lg:hidden mb-2">
-            <div
-              className="w-7 h-7 bg-[var(--ink)] text-[var(--canvas)] flex items-center justify-center shrink-0"
-              style={{ borderRadius: '30%' }}
-            >
-              <SparklesIcon className="w-3.5 h-3.5 text-[var(--canvas)]" />
-            </div>
+            <Image
+              src="/logos/ToyBox-Logo.png"
+              alt="ToyBox.ai"
+              width={32}
+              height={32}
+              className="w-7 h-7 object-contain shrink-0"
+              priority
+            />
             <p className="text-xl font-bold tracking-tight text-[var(--ink)]">
               {siteConfig.name}
             </p>
@@ -448,13 +454,13 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
                     ? 'Verify Your Email'
                     : mode === 'sign-up'
                     ? 'Create Your Account'
-                    : 'Sign In to Toybox'}
+                    : 'Sign In to ToyBox.ai'}
                 </h1>
                 <p className="text-sm text-[var(--text-muted)]">
                   {mode === 'verify-otp'
                     ? `Enter the 6-digit confirmation code dispatched to ${email}`
                     : mode === 'sign-up'
-                    ? 'Join Toybox to distill multi-platform communication.'
+                    ? 'Join ToyBox.ai to distill multi-platform communication.'
                     : 'Welcome back. Access your executive inbox & autonomous agents.'}
                 </p>
               </div>
@@ -545,11 +551,11 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
 
                   {/* Visual Divider */}
                   <div className="flex w-full items-center justify-center py-2">
-                    <div className="bg-[var(--hairline)] h-px w-full" />
-                    <span className="text-[var(--text-faint)] px-3 text-[11px] font-mono tracking-widest uppercase">
+                    <div className="bg-[var(--hairline)] h-px flex-1" />
+                    <span className="text-[var(--text-faint)] px-3 text-[11px] font-mono tracking-widest uppercase whitespace-nowrap shrink-0">
                       Or with email
                     </span>
-                    <div className="bg-[var(--hairline)] h-px w-full" />
+                    <div className="bg-[var(--hairline)] h-px flex-1" />
                   </div>
                 </div>
               )}
@@ -746,7 +752,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
 
               {/* Terms & Privacy */}
               <p className="text-center text-[11px] text-[var(--text-faint)] leading-relaxed">
-                By continuing, you agree to Toybox&apos;s{' '}
+                By continuing, you agree to ToyBox.ai&apos;s{' '}
                 <a href="#terms" className="underline underline-offset-2 hover:text-[var(--ink)] transition-colors">
                   Terms of Service
                 </a>{' '}

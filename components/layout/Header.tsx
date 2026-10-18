@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Sparkles, Menu, X, ArrowUpRight } from "lucide-react";
+import Image from "next/image";
+import { Menu, X, ArrowUpRight } from "lucide-react";
 import { mainNav, siteConfig } from "@/config";
 
 export function Header() {
@@ -14,14 +15,16 @@ export function Header() {
         {/* Floating Nav Pill - Mobbin stadium pill */}
         <div className="w-full bg-[var(--canvas-soft)] border border-[var(--hairline)] rounded-full px-3 py-2 sm:px-4 sm:py-2.5 flex items-center justify-between transition-all duration-200 shadow-sm">
           {/* Brand Logo & Mark */}
-          <Link href="/" className="flex items-center gap-2.5 pl-1.5 group">
-            <div
-              className="w-7 h-7 bg-[var(--ink)] text-[var(--canvas)] flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-              style={{ borderRadius: "30%" }}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[var(--canvas)]" />
-            </div>
-            <span className="font-[650] text-[17px] text-[var(--ink)] tracking-tight select-none">
+          <Link href="/" className="flex items-center gap-3 pl-1 sm:pl-1.5 group">
+            <Image
+              src="/logos/ToyBox-Logo.png"
+              alt="ToyBox.ai"
+              width={55}
+              height={55}
+              className="w-12 h-12 sm:w-12 sm:h-12 object-contain shrink-0 transition-transform duration-200 group-hover:scale-105"
+              priority
+            />
+            <span className="font-[650] text-[18px] sm:text-[19px] text-[var(--ink)] tracking-tight select-none">
               {siteConfig.name}
             </span>
           </Link>

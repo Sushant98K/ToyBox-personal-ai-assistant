@@ -13,7 +13,7 @@ export function WorkflowSection() {
       step: "01",
       title: "One-click OAuth authentication.",
       description:
-        "Connect Gmail, Slack, WhatsApp Web, Telegram, and Microsoft Outlook securely. Toybox requests read-and-synthesize permissions only — your passwords are never shared.",
+        "Connect Gmail, Slack, WhatsApp Web, Telegram, and Microsoft Outlook securely. ToyBox.ai requests read-and-synthesize permissions only — your passwords are never shared.",
       badge: "Instant Setup",
       mock: (
         <div className="flex items-center justify-center gap-2 pt-2">
@@ -33,7 +33,7 @@ export function WorkflowSection() {
     },
     {
       step: "02",
-      title: "Toybox distills cross-channel noise.",
+      title: "ToyBox.ai distills cross-channel noise.",
       description:
         "Our specialized agents cluster threads by subject and urgency. Senders who need immediate input are flagged; low-priority chatter is condensed into executive digests.",
       badge: "Autonomous AI Engine",
@@ -53,7 +53,7 @@ export function WorkflowSection() {
       step: "03",
       title: "Approve drafts and clear commitments.",
       description:
-        "Review your morning brief in 90 seconds. Approve generated reply drafts, let Toybox schedule calendar blocks, and start your workday with a clear mind.",
+        "Review your morning brief in 90 seconds. Approve generated reply drafts, let ToyBox.ai schedule calendar blocks, and start your workday with a clear mind.",
       badge: "One-Tap Action",
       mock: (
         <div className="flex items-center gap-2 pt-1">
@@ -76,7 +76,7 @@ export function WorkflowSection() {
             Workflow Architecture
           </span>
           <h2 className="text-3xl sm:text-4xl md:text-[44px] font-[650] text-[var(--ink)] leading-[1.13] tracking-tight">
-            How Toybox transforms your day.
+            How ToyBox.ai transforms your day.
           </h2>
           <p className="mt-4 text-lg text-[var(--text-muted)] font-[300] leading-[1.38]">
             From fractured communication silos to a calm, unified briefing stream in three simple steps.

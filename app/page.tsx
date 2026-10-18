@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import { Header, Footer } from "@/components/layout";
 import {
   HeroSection,
@@ -10,41 +12,69 @@ import {
   FaqSection,
   CtaSection,
 } from "@/components/sections";
+import { AgentWaveLoader } from "@/components/ui/agent-wave-loader";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Initial loading display for the main page
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 850);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] selection:bg-[var(--ink)] selection:text-[var(--canvas)] flex flex-col justify-between transition-colors duration-200">
-      {/* Floating Centered Nav Pill */}
-      <Header />
+    <>
+      <AnimatePresence>
+        {loading && (
+          <motion.div
+            key="page-loader"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--canvas)] transition-colors duration-200"
+          >
+            <AgentWaveLoader label="Initializing ToyBox.ai agents…" durationMs={2200} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <main className="flex-1">
-        {/* Hero Section with Interactive Multi-App Terminal Mockup */}
-        <HeroSection />
+      <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] selection:bg-[var(--ink)] selection:text-[var(--canvas)] flex flex-col justify-between transition-colors duration-200">
+        {/* Floating Centered Nav Pill */}
+        <Header />
 
-        {/* Integration Brand Marquee */}
-        <IntegrationMarquee />
+        <main className="flex-1">
+          {/* Hero Section with Interactive Multi-App Terminal Mockup */}
+          <HeroSection />
 
-        {/* Bento Grid Feature Suite */}
-        <BentoFeatures />
+          {/* Integration Brand Marquee */}
+          <IntegrationMarquee />
 
-        {/* Workflow Architecture (How Toybox Works) */}
-        <WorkflowSection />
+          {/* Bento Grid Feature Suite */}
+          <BentoFeatures />
 
-        {/* Social Proof & Testimonials */}
-        <TestimonialsSection />
+          {/* Workflow Architecture (How ToyBox.ai Works) */}
+          <WorkflowSection />
 
-        {/* Pricing with Segmented Control & Electric Blue Badge */}
-        <PricingSection />
+          {/* Social Proof & Testimonials */}
+          <TestimonialsSection />
 
-        {/* FAQ Accordion */}
-        <FaqSection />
+          {/* Pricing with Segmented Control & Electric Blue Badge */}
+          <PricingSection />
 
-        {/* Pre-Footer CTA */}
-        <CtaSection />
-      </main>
+          {/* FAQ Accordion */}
+          <FaqSection />
 
-      {/* Full-bleed Polarity Inversion Footer with rounded top corners */}
-      <Footer />
-    </div>
+          {/* Pre-Footer CTA */}
+          <CtaSection />
+        </main>
+
+        {/* Full-bleed Polarity Inversion Footer with rounded top corners */}
+        <Footer />
+      </div>
+    </>
   );
 }

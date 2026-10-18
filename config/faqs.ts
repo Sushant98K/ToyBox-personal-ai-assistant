@@ -2,9 +2,9 @@ import { FaqItem } from "@/types";
 
 export const faqItems: FaqItem[] = [
   {
-    question: "How does Toybox connect to WhatsApp and Telegram without my password?",
+    question: "How does ToyBox.ai connect to WhatsApp and Telegram without my password?",
     answer:
-      "Toybox connects to WhatsApp via the official WhatsApp Business / Web Multi-Device protocol and Telegram via MTProto bridge sessions. We never ask for your passwords or SMS verification codes directly. You authenticate through a QR scan or OAuth token directly verified on your own device.",
+      "ToyBox.ai connects to WhatsApp via the official WhatsApp Business / Web Multi-Device protocol and Telegram via MTProto bridge sessions. We never ask for your passwords or SMS verification codes directly. You authenticate through a QR scan or OAuth token directly verified on your own device.",
   },
   {
     question: "Is my personal and company communication private?",
@@ -17,14 +17,14 @@ export const faqItems: FaqItem[] = [
       "Yes. You have total granular control. You can configure morning briefings (e.g., 7:30 AM), midday check-ins (1:00 PM), or end-of-day wrap-ups (6:00 PM). You can also request an on-demand summary at any time directly through our web app or Telegram bot.",
   },
   {
-    question: "How does Toybox distinguish between spam and VIP emergencies?",
+    question: "How does ToyBox.ai distinguish between spam and VIP emergencies?",
     answer:
-      "Toybox combines semantic understanding with your communication graph. Key contacts (such as your co-founders, board members, key enterprise clients, or family members) are marked with VIP rules. While promotional newsletters and active group chatter are batched for later, VIP urgent requests trigger instant notifications.",
+      "ToyBox.ai combines semantic understanding with your communication graph. Key contacts (such as your co-founders, board members, key enterprise clients, or family members) are marked with VIP rules. While promotional newsletters and active group chatter are batched for later, VIP urgent requests trigger instant notifications.",
   },
   {
-    question: "Does Toybox send replies autonomously without my knowledge?",
+    question: "Does ToyBox.ai send replies autonomously without my knowledge?",
     answer:
-      "Never. Toybox prepares suggested drafts with full context, but will only send messages after you explicitly review and tap 'Approve'. You retain complete editorial control at all times.",
+      "Never. ToyBox.ai prepares suggested drafts with full context, but will only send messages after you explicitly review and tap 'Approve'. You retain complete editorial control at all times.",
   },
   {
     question: "What happens if I decide to cancel my subscription?",

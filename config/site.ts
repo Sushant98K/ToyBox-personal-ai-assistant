@@ -1,10 +1,10 @@
 import { NavItem } from "@/types";
 
 export const siteConfig = {
-  name: "Toybox",
-  shortName: "Toybox",
+  name: "ToyBox.ai",
+  shortName: "ToyBox.ai",
   tagline: "Task Optimization & Yield Bot for Operations and eXecution",
-  title: "Toybox – Task Optimization & Yield Bot for Operations and eXecution",
+  title: "ToyBox.ai – Task Optimization & Yield Bot for Operations and eXecution",
   description:
     "Task Optimization & Yield Bot for Operations and eXecution. Distill multi-platform chaos across Gmail, Slack, WhatsApp, Telegram, and Outlook into executive briefs and autonomous actions.",
   url: "https://toybox.ai",

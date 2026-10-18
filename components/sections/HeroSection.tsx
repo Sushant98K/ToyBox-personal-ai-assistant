@@ -46,7 +46,7 @@ export function HeroSection() {
         {/* Soft Eyebrow Pill */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--canvas-soft)] text-[var(--ink)] text-xs font-[600] mb-8 border border-[var(--hairline)]">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-[650]">Toybox</span>
+          <span className="font-[650]">ToyBox.ai</span>
           <span className="text-[var(--text-muted)]">•</span>
           <span>Task Optimization &amp; Yield Bot</span>
           <span className="text-[var(--text-muted)] hidden sm:inline">•</span>
@@ -60,7 +60,7 @@ export function HeroSection() {
 
         {/* Lead Subtitle - Saans 300 Light */}
         <p className="mt-6 text-lg sm:text-xl text-[var(--text-muted)] font-[300] leading-[1.4] max-w-2xl text-center">
-          Connect Gmail, Slack, WhatsApp, Telegram, and Outlook in minutes. Toybox triages incoming messages, generates executive daily briefs, and schedules smart reminders before anything slips.
+          Connect Gmail, Slack, WhatsApp, Telegram, and Outlook in minutes. ToyBox.ai triages incoming messages, generates executive daily briefs, and schedules smart reminders before anything slips.
         </p>
 
         {/* CTA Button Row */}
@@ -119,7 +119,7 @@ export function HeroSection() {
                 <span className="w-3 h-3 rounded-full bg-[var(--hairline)]" />
               </div>
               <span className="text-xs font-[650] text-[var(--text-muted)] pl-2 border-l border-[var(--hairline)]">
-                Toybox Terminal • Morning Operations Brief
+                ToyBox.ai Terminal • Morning Operations Brief
               </span>
             </div>
 
@@ -312,7 +312,7 @@ export function HeroSection() {
                         Q3 Product Roadmap Review overlapped with Investor sync at 3:00 PM.
                       </p>
                       <p className="text-xs text-[var(--text-muted)] font-[450] leading-relaxed">
-                        Toybox prepared an alternative 4:30 PM slot with all 6 attendees confirmed available.
+                        ToyBox.ai prepared an alternative 4:30 PM slot with all 6 attendees confirmed available.
                       </p>
                     </div>
                     <span className="text-xs font-[450] text-[var(--text-faint)] shrink-0">
