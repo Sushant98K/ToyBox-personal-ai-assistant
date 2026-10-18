@@ -21,7 +21,7 @@ export function IntegrationMarquee() {
           Connect every inbox and messenger in 60 seconds.
         </h2>
         <p className="mt-4 text-lg text-[var(--text-muted)] font-[300] leading-[1.38] max-w-2xl mx-auto">
-          Toybox establishes read-and-synthesize connections through official APIs and certified OAuth 2.0. No credential sharing, zero unencrypted storage.
+          ToyBox.ai establishes read-and-synthesize connections through official APIs and certified OAuth 2.0. No credential sharing, zero unencrypted storage.
         </p>
       </div>
 

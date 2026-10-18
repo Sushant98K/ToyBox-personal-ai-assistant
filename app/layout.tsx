@@ -24,6 +24,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} h-full antialiased dark`}
       data-theme="dark"
+      data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
       <head>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './button';
 import { Input } from './input';
+import { AgentWaveLoader } from './agent-wave-loader';
 import { cn } from '@/lib/utils';
 import { insforge } from '@/lib/insforge';
 import {
@@ -33,7 +34,7 @@ interface AuthPageProps {
 
 export function AuthPage(props: AuthPageProps) {
   return (
-    <React.Suspense fallback={<div className="min-h-screen bg-[var(--canvas)] flex items-center justify-center"><Loader2Icon className="size-6 animate-spin text-[var(--ink)]" /></div>}>
+    <React.Suspense fallback={<div className="min-h-screen bg-[var(--canvas)] flex items-center justify-center"><AgentWaveLoader label="Loading authentication…" /></div>}>
       <AuthPageContent {...props} />
     </React.Suspense>
   );
@@ -329,7 +330,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         <div className="z-10 mt-auto rounded-[24px] border border-[var(--hairline-soft)] bg-[var(--raised)]/80 p-6 backdrop-blur-md">
           <blockquote className="space-y-3">
             <p className="text-base sm:text-lg font-normal text-[var(--ink)] leading-relaxed">
-              &ldquo;My biggest dread every morning was opening WhatsApp to find 80 messages alongside 200 unread Slack notifications. Toybox synthesizes everything into an executive brief by 7:30 AM.&rdquo;
+              &ldquo;My biggest dread every morning was opening WhatsApp to find 80 messages alongside 200 unread Slack notifications. ToyBox.ai synthesizes everything into an executive brief by 7:30 AM.&rdquo;
             </p>
             <footer className="flex items-center gap-3 pt-2 border-t border-[var(--hairline)]">
               <div
@@ -448,13 +449,13 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
                     ? 'Verify Your Email'
                     : mode === 'sign-up'
                     ? 'Create Your Account'
-                    : 'Sign In to Toybox'}
+                    : 'Sign In to ToyBox.ai'}
                 </h1>
                 <p className="text-sm text-[var(--text-muted)]">
                   {mode === 'verify-otp'
                     ? `Enter the 6-digit confirmation code dispatched to ${email}`
                     : mode === 'sign-up'
-                    ? 'Join Toybox to distill multi-platform communication.'
+                    ? 'Join ToyBox.ai to distill multi-platform communication.'
                     : 'Welcome back. Access your executive inbox & autonomous agents.'}
                 </p>
               </div>
@@ -746,7 +747,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
 
               {/* Terms & Privacy */}
               <p className="text-center text-[11px] text-[var(--text-faint)] leading-relaxed">
-                By continuing, you agree to Toybox&apos;s{' '}
+                By continuing, you agree to ToyBox.ai&apos;s{' '}
                 <a href="#terms" className="underline underline-offset-2 hover:text-[var(--ink)] transition-colors">
                   Terms of Service
                 </a>{' '}

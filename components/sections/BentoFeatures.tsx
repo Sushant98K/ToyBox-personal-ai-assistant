@@ -31,7 +31,7 @@ export function BentoFeatures() {
             Engineered to quiet the noise.
           </h2>
           <p className="mt-5 text-lg sm:text-xl text-[var(--text-muted)] font-[300] leading-[1.38]">
-            Toybox monitors your disparate communication channels around the clock, so you only engage when your judgment is genuinely needed.
+            ToyBox.ai monitors your disparate communication channels around the clock, so you only engage when your judgment is genuinely needed.
           </p>
         </div>
 
@@ -53,7 +53,7 @@ export function BentoFeatures() {
                 One narrative across WhatsApp, Slack, and Gmail.
               </h3>
               <p className="mt-3 text-[var(--text-muted)] font-[450] text-sm sm:text-base leading-relaxed max-w-xl">
-                When a high-stakes deal scatters across an email thread, a Slack channel, and urgent WhatsApp pings, Toybox merges them into a single coherent timeline with direct citations.
+                When a high-stakes deal scatters across an email thread, a Slack channel, and urgent WhatsApp pings, ToyBox.ai merges them into a single coherent timeline with direct citations.
               </p>
             </div>
 
@@ -118,7 +118,7 @@ export function BentoFeatures() {
                 Zero missed commitments.
               </h3>
               <p className="mt-3 text-[var(--text-muted)] font-[450] text-sm leading-relaxed">
-                Toybox reads implicit commitments like <em>&ldquo;I&apos;ll send the pitch deck tomorrow at 2 PM&rdquo;</em> and auto-schedules verified reminders.
+                ToyBox.ai reads implicit commitments like <em>&ldquo;I&apos;ll send the pitch deck tomorrow at 2 PM&rdquo;</em> and auto-schedules verified reminders.
               </p>
             </div>
 
@@ -158,7 +158,7 @@ export function BentoFeatures() {
                 Audio notes into instant bullet points.
               </h3>
               <p className="mt-3 text-[var(--text-muted)] font-[450] text-sm leading-relaxed">
-                Skip listening to 4-minute voice rambles. Toybox strips verbal filler, captures the core decision, and highlights what you owe.
+                Skip listening to 4-minute voice rambles. ToyBox.ai strips verbal filler, captures the core decision, and highlights what you owe.
               </p>
             </div>
 
@@ -215,7 +215,7 @@ export function BentoFeatures() {
                 VIP signals through. Noise held back.
               </h3>
               <p className="mt-3 text-[var(--text-muted)] font-[450] text-sm leading-relaxed">
-                Toybox silences newsletters and chat clutter while ensuring you never miss a message from your board, key partners, or family.
+                ToyBox.ai silences newsletters and chat clutter while ensuring you never miss a message from your board, key partners, or family.
               </p>
             </div>
 
