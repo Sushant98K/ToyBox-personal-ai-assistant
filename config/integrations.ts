@@ -1,0 +1,60 @@
+import { Integration } from "@/types";
+
+export const supportedIntegrations: Integration[] = [
+  {
+    id: "gmail",
+    name: "Gmail",
+    role: "Email & Threads",
+    status: "OAuth 2.0 Verified",
+    protocol: "Google Workspace API",
+    type: "email",
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    role: "Channels & DMs",
+    status: "Enterprise Grid Ready",
+    protocol: "Slack Web API & Bot",
+    type: "messaging",
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp",
+    role: "Chats & Voice Notes",
+    status: "End-to-End Encrypted",
+    protocol: "Multi-Device Protocol",
+    type: "messaging",
+  },
+  {
+    id: "telegram",
+    name: "Telegram",
+    role: "Groups & Saved Messages",
+    status: "MTProto Secure Bridge",
+    protocol: "Telegram MTProto 2.0",
+    type: "messaging",
+  },
+  {
+    id: "outlook",
+    name: "Microsoft Outlook",
+    role: "Exchange & 365 Calendar",
+    status: "Graph API Certified",
+    protocol: "Microsoft Graph REST",
+    type: "email",
+  },
+  {
+    id: "gcal",
+    name: "Google Calendar",
+    role: "Schedule & Event Sync",
+    status: "Smart Clash Detection",
+    protocol: "Google Calendar API v3",
+    type: "calendar",
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    role: "Daily Logs & Task Sync",
+    status: "Automated Export",
+    protocol: "Notion Integrations API",
+    type: "workspace",
+  },
+];
