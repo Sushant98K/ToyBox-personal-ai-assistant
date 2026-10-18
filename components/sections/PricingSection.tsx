@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Check, ArrowRight } from "lucide-react";
 import { pricingPlans } from "@/config";
 
@@ -131,8 +132,8 @@ export function PricingSection() {
                 </div>
 
                 <div className="mt-9">
-                  <a
-                    href="#signup"
+                  <Link
+                    href="/sign-up"
                     className={`w-full inline-flex items-center justify-center gap-2 font-[600] text-sm py-3.5 rounded-full transition-all ${
                       isFeatured
                         ? "bg-[var(--primary)] hover:opacity-90 text-[var(--on-primary)]"
@@ -145,7 +146,7 @@ export function PricingSection() {
                         isFeatured ? "text-[var(--on-primary)]" : "text-[var(--text-muted)]"
                       }`}
                     />
-                  </a>
+                  </Link>
                 </div>
               </div>
             );

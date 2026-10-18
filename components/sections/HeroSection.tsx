@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
@@ -64,13 +65,13 @@ export function HeroSection() {
 
         {/* CTA Button Row */}
         <div className="mt-10 flex flex-col sm:flex-row items-center gap-3.5 w-full sm:w-auto">
-          <a
-            href="#signup"
+          <Link
+            href="/sign-up"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[var(--primary)] hover:opacity-90 text-[var(--on-primary)] font-[600] text-[16px] px-7 py-3.5 rounded-full transition-all"
           >
             <span>Connect your accounts</span>
             <ArrowRight className="w-4 h-4" />
-          </a>
+          </Link>
           <a
             href="#features"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[var(--canvas)] hover:bg-[var(--canvas-soft)] text-[var(--ink)] border border-[var(--hairline)] font-[600] text-[16px] px-7 py-3.5 rounded-full transition-all"

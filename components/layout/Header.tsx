@@ -41,19 +41,19 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <a
-              href="#signup"
+            <Link
+              href="/sign-in"
               className="hidden sm:inline-flex text-[14px] font-[600] text-[var(--ink)] px-3.5 py-1.5 hover:text-[var(--ink-soft)] transition-colors"
             >
               Log in
-            </a>
-            <a
-              href="#signup"
+            </Link>
+            <Link
+              href="/sign-up"
               className="bg-[var(--primary)] hover:opacity-90 text-[var(--on-primary)] text-[14px] font-[600] px-4 py-2 rounded-full transition-all flex items-center gap-1.5"
             >
               <span>Get started</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
-            </a>
+            </Link>
 
             {/* Mobile Menu Button */}
             <button
@@ -86,20 +86,20 @@ export function Header() {
               </a>
             ))}
             <div className="pt-3 border-t border-[var(--hairline)] flex items-center justify-between">
-              <a
-                href="#signup"
+              <Link
+                href="/sign-in"
                 onClick={() => setMobileMenuOpen(false)}
                 className="font-[600] text-sm text-[var(--ink)]"
               >
                 Log in
-              </a>
-              <a
-                href="#signup"
+              </Link>
+              <Link
+                href="/sign-up"
                 onClick={() => setMobileMenuOpen(false)}
                 className="bg-[var(--primary)] text-[var(--on-primary)] text-sm font-[600] px-4 py-2 rounded-full"
               >
                 Start free trial
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import {
   GmailIcon,
@@ -11,13 +12,15 @@ import {
 } from "@/components/icons";
 
 export function CtaSection() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (email) {
-      setSubmitted(true);
+      router.push(`/sign-up?email=${encodeURIComponent(email)}`);
+    } else {
+      router.push("/sign-up");
     }
   };
 
@@ -53,35 +56,28 @@ export function CtaSection() {
         </div>
 
         {/* Form with Mobbin text-input & button-primary tokens */}
-        {submitted ? (
-          <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-sm font-[600] text-[var(--ink)]">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span>Welcome aboard! Check your inbox to connect your first app.</span>
-          </div>
-        ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col sm:flex-row items-center justify-center gap-2.5 max-w-md mx-auto"
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col sm:flex-row items-center justify-center gap-2.5 max-w-md mx-auto"
+        >
+          {/* text-input: field fill, no border at rest, 2px ink ring on focus */}
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your work email..."
+            className="w-full sm:flex-1 bg-[var(--field)] text-[var(--ink)] placeholder-[var(--text-faint)] text-sm rounded-[16px] px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--ink)] transition-all"
+          />
+          {/* button-primary: primary fill, on-primary text, rounded-full */}
+          <button
+            type="submit"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[var(--primary)] hover:opacity-90 text-[var(--on-primary)] font-[600] text-sm px-6 py-3 rounded-full transition-all shrink-0 cursor-pointer"
           >
-            {/* text-input: field fill, no border at rest, 2px ink ring on focus */}
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your work email..."
-              className="w-full sm:flex-1 bg-[var(--field)] text-[var(--ink)] placeholder-[var(--text-faint)] text-sm rounded-[16px] px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--ink)] transition-all"
-            />
-            {/* button-primary: primary fill, on-primary text, rounded-full */}
-            <button
-              type="submit"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[var(--primary)] hover:opacity-90 text-[var(--on-primary)] font-[600] text-sm px-6 py-3 rounded-full transition-all shrink-0 cursor-pointer"
-            >
-              <span>Get started</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        )}
+            <span>Get started</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </form>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-[var(--text-muted)] font-[450]">
           <span className="flex items-center gap-1.5">
