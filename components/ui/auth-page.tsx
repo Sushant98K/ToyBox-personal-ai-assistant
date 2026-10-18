@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './button';
@@ -308,12 +309,14 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         {/* Brand Lockup */}
         <div className="z-10 flex items-center gap-2.5">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div
-              className="w-8 h-8 bg-[var(--ink)] text-[var(--canvas)] flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-              style={{ borderRadius: '30%' }}
-            >
-              <SparklesIcon className="w-4 h-4 text-[var(--canvas)]" />
-            </div>
+            <Image
+              src="/logos/ToyBox-Logo.png"
+              alt="ToyBox.ai"
+              width={55}
+              height={55}
+              className="w-12 h-12 sm:w-12 sm:h-12 object-contain shrink-0 transition-transform group-hover:scale-105"
+              priority
+            />
             <p className="text-xl font-bold tracking-tight text-[var(--ink)]">
               {siteConfig.name}
             </p>
@@ -363,12 +366,14 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         <div className="mx-auto w-full max-w-sm space-y-6">
           {/* Mobile Brand Mark */}
           <div className="flex items-center gap-2.5 lg:hidden mb-2">
-            <div
-              className="w-7 h-7 bg-[var(--ink)] text-[var(--canvas)] flex items-center justify-center shrink-0"
-              style={{ borderRadius: '30%' }}
-            >
-              <SparklesIcon className="w-3.5 h-3.5 text-[var(--canvas)]" />
-            </div>
+            <Image
+              src="/logos/ToyBox-Logo.png"
+              alt="ToyBox.ai"
+              width={32}
+              height={32}
+              className="w-7 h-7 object-contain shrink-0"
+              priority
+            />
             <p className="text-xl font-bold tracking-tight text-[var(--ink)]">
               {siteConfig.name}
             </p>
@@ -546,11 +551,11 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
 
                   {/* Visual Divider */}
                   <div className="flex w-full items-center justify-center py-2">
-                    <div className="bg-[var(--hairline)] h-px w-full" />
-                    <span className="text-[var(--text-faint)] px-3 text-[11px] font-mono tracking-widest uppercase">
+                    <div className="bg-[var(--hairline)] h-px flex-1" />
+                    <span className="text-[var(--text-faint)] px-3 text-[11px] font-mono tracking-widest uppercase whitespace-nowrap shrink-0">
                       Or with email
                     </span>
-                    <div className="bg-[var(--hairline)] h-px w-full" />
+                    <div className="bg-[var(--hairline)] h-px flex-1" />
                   </div>
                 </div>
               )}
