@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- White squircle tile with subtle hairline outline for optimal contrast on both dark and light modes -->
+  <rect x="2" y="2" width="44" height="44" rx="10" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5"/>
+  <!-- Notion N with folded top flap -->
+  <path fill="#000000" d="M12.5 12.5l14-2c1.8-.2 3 .8 3 2.5v19c0 1.3-.7 2.1-1.9 2.3l-14.3 2c-1.3.2-2.3-.7-2.3-2.1V14.5c0-1.2.7-2 1.5-2.2z"/>
+  <path fill="#FFFFFF" d="M14.5 14.5l10.5-1.5v17.5l-10.5 1.5V14.5z"/>
+  <path fill="#000000" d="M16 16.5h2.8l5.8 8.8v-8.8h2.6v12h-2.5l-6.1-9.2v9.2H16v-12z"/>
+</svg>

@@ -13,7 +13,7 @@ import {
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white text-[#141414] selection:bg-[#141414] selection:text-white flex flex-col justify-between">
+    <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] selection:bg-[var(--ink)] selection:text-[var(--canvas)] flex flex-col justify-between transition-colors duration-200">
       {/* Floating Centered Nav Pill */}
       <Header />
 

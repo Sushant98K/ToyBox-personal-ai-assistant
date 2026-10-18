@@ -1,22 +1,54 @@
 @import "tailwindcss";
 
-:root {
-  --canvas: #ffffff;
-  --canvas-soft: #f3f3f3;
-  --field: #f0f0f0;
-  --hairline-soft: #f0f0f0;
-  --hairline: #e0e0e0;
-  --ink: #141414;
-  --ink-soft: #262626;
-  --text-muted: #707070;
-  --text-faint: #adadad;
-  --accent: #0066ff;
+/* 
+  Mobbin Monochrome Design System Tokens
+  Directly mapped from Agents/light-theme.png & Agents/dark-theme.png specifications.
+  Dark theme is the default per project instructions.
+*/
+:root,
+[data-theme="dark"],
+.dark {
+  /* Dark Theme Tokens (Agents/dark-theme.png) */
+  --primary: #f5f5f5;          /* Polar White: primary CTA pills & display headings */
+  --accent: #0066ff;           /* Electric Blue: commercial signals only */
+  --canvas: #141414;           /* Neutral near-black, never pure #000 */
+  --canvas-soft: #1d1d1d;      /* Lifted tier: nav pill, featured card, FAQ rows, footer band */
+  --raised: #242424;           /* Brightest neutral fill: active toggle pills & lifted chrome */
+  --field: #1e1e1e;            /* Form-input fill */
+  --hairline-soft: #262626;     /* 1px outlines on dark-on-dark cards */
+  --hairline: #333333;         /* Stronger control border: outlined pills, interactive chrome */
+  --ink: #f5f5f5;              /* Headings, body copy, nav links */
+  --ink-soft: #e2e2e2;         /* Slightly dimmed white for secondary lockups */
+  --text-muted: #a0a0a0;       /* Secondary copy: plan descriptions, vote counts, links */
+  --text-faint: #707070;       /* Placeholders, de-emphasized footer links, fine print */
+  --on-primary: #141414;       /* Near-black labels on the white primary pill */
+  color-scheme: dark;
+}
+
+[data-theme="light"],
+.light {
+  /* Light Theme Tokens (Agents/light-theme.png) */
+  --primary: #141414;          /* Ink Black: primary CTA pill fill, footer band */
+  --accent: #0066ff;           /* Electric Blue: popular badge and savings callouts */
+  --canvas: #ffffff;           /* Default pure white page background */
+  --canvas-soft: #f3f3f3;      /* 6% ink wash: nav pill, featured card, FAQ rows */
+  --raised: #ffffff;           /* Active toggle pills on light background */
+  --field: #f0f0f0;            /* 8% ink wash: form-input fill */
+  --hairline-soft: #f0f0f0;     /* 1px outlines on white cards */
+  --hairline: #e0e0e0;         /* 16% control border: outlined pill buttons, chrome */
+  --ink: #141414;              /* Headings, body copy, nav links */
+  --ink-soft: #262626;         /* Secondary lockups */
+  --text-muted: #707070;       /* Secondary copy */
+  --text-faint: #adadad;       /* Tertiary text, placeholders */
+  --on-primary: #ffffff;       /* Labels on ink fills */
+  color-scheme: light;
 }
 
 @theme {
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --color-canvas: var(--canvas);
   --color-canvas-soft: var(--canvas-soft);
+  --color-raised: var(--raised);
   --color-field: var(--field);
   --color-hairline-soft: var(--hairline-soft);
   --color-hairline: var(--hairline);
@@ -25,15 +57,19 @@
   --color-text-muted: var(--text-muted);
   --color-text-faint: var(--text-faint);
   --color-accent: var(--accent);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
 }
 
 html {
   scroll-behavior: smooth;
+  background-color: var(--canvas);
+  color: var(--ink);
 }
 
 body {
-  background-color: #ffffff;
-  color: #141414;
+  background-color: var(--canvas);
+  color: var(--ink);
   font-family: var(--font-sans);
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
@@ -60,4 +96,3 @@ body {
 .squircle-30 {
   border-radius: 30%;
 }
-
