@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SocialIcon } from "@/components/icons/AppIcons";
 
 interface AlertItem {
   id: number;
@@ -179,8 +180,11 @@ export function AlertsView() {
                     >
                       {item.severity}
                     </span>
-                    <span className="text-xs font-[600] text-[var(--text-muted)]">
-                      {item.source}
+                    <span className="text-xs font-[600] text-[var(--text-muted)] flex items-center gap-1.5">
+                      {["slack", "whatsapp", "gmail", "outlook", "telegram", "gcal", "notion", "discord"].includes(item.channel.toLowerCase()) && (
+                        <SocialIcon name={item.channel} size={14} className="w-3.5 h-3.5 object-contain" />
+                      )}
+                      <span>{item.source}</span>
                     </span>
                   </div>
 

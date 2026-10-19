@@ -10,6 +10,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SocialIcon } from "@/components/icons/AppIcons";
 
 interface AgentItem {
   id: string;
@@ -131,10 +132,42 @@ export function AiAgentView() {
                       <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
                         {agent.name}
                       </h3>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-[var(--text-muted)]">
-                          {agent.channels.join(", ")}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {agent.channels.map((ch) => {
+                          const lower = ch.toLowerCase();
+                          const iconName = lower.includes("gmail")
+                            ? "gmail"
+                            : lower.includes("outlook")
+                            ? "outlook"
+                            : lower.includes("whatsapp")
+                            ? "whatsapp"
+                            : lower.includes("telegram")
+                            ? "telegram"
+                            : lower.includes("calendar") || lower.includes("meet")
+                            ? "gcal"
+                            : lower.includes("slack")
+                            ? "slack"
+                            : lower.includes("notion")
+                            ? "notion"
+                            : lower.includes("discord")
+                            ? "discord"
+                            : null;
+                          return (
+                            <span
+                              key={ch}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline-soft)] text-[10px] font-[500] text-[var(--text-muted)]"
+                            >
+                              {iconName && (
+                                <SocialIcon
+                                  name={iconName}
+                                  size={12}
+                                  className="w-3 h-3 object-contain"
+                                />
+                              )}
+                              <span>{ch}</span>
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

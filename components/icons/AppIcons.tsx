@@ -15,14 +15,53 @@ export type SocialIconName =
   | "telegram"
   | "outlook"
   | "gcal"
-  | "notion";
+  | "notion"
+  | "discord";
 
 interface SocialIconProps extends IconProps {
   name: SocialIconName | string;
 }
 
+export function resolveSocialIconName(name: string): string {
+  const clean = name.toLowerCase().trim();
+  switch (clean) {
+    case "gcal":
+    case "google-calendar":
+    case "google_calendar":
+    case "calendar":
+    case "meet":
+      return "gcal";
+    case "gmail":
+    case "google-workspace":
+    case "workspace":
+    case "mail":
+    case "email":
+      return "gmail";
+    case "slack":
+      return "slack";
+    case "whatsapp":
+    case "wa":
+      return "whatsapp";
+    case "telegram":
+    case "tg":
+      return "telegram";
+    case "outlook":
+    case "microsoft":
+    case "microsoft-365":
+    case "office":
+    case "m365":
+      return "outlook";
+    case "notion":
+      return "notion";
+    case "discord":
+      return "discord";
+    default:
+      return clean;
+  }
+}
+
 /**
- * SocialIcon loads brand icons directly from /icons/social/{name}.png (with /icons/social/{name}.svg fallback).
+ * SocialIcon loads brand icons directly from /icons/social/{name}.svg (with /icons/social/{name}.png fallback).
  * Users can easily customize or replace icons by dropping new files into public/icons/social/.
  */
 export function SocialIcon({
@@ -31,21 +70,21 @@ export function SocialIcon({
   size = 24,
   alt,
 }: SocialIconProps) {
-  const [srcType, setSrcType] = useState<"png" | "svg" | "fallback">("png");
-  const normalized = name.toLowerCase().trim();
+  const [srcType, setSrcType] = useState<"svg" | "png" | "fallback">("svg");
+  const normalized = resolveSocialIconName(name);
 
   const handleError = () => {
-    if (srcType === "png") {
-      setSrcType("svg");
+    if (srcType === "svg") {
+      setSrcType("png");
     } else {
       setSrcType("fallback");
     }
   };
 
   const imageSrc =
-    srcType === "png"
-      ? `/icons/social/${normalized}.png`
-      : `/icons/social/${normalized}.svg`;
+    srcType === "svg"
+      ? `/icons/social/${normalized}.svg`
+      : `/icons/social/${normalized}.png`;
 
   return (
     <img
@@ -54,7 +93,7 @@ export function SocialIcon({
       width={size}
       height={size}
       onError={handleError}
-      className={`inline-block object-contain select-none ${className}`}
+      className={`inline-block object-contain select-none shrink-0 ${className}`}
       loading="lazy"
       decoding="async"
     />
@@ -88,4 +127,8 @@ export function GCalIcon(props: IconProps) {
 
 export function NotionIcon(props: IconProps) {
   return <SocialIcon name="notion" alt="Notion" {...props} />;
+}
+
+export function DiscordIcon(props: IconProps) {
+  return <SocialIcon name="discord" alt="Discord" {...props} />;
 }

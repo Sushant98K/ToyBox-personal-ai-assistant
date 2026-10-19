@@ -12,6 +12,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SocialIcon } from "@/components/icons/AppIcons";
 
 export function BriefingView() {
   const [selectedCategory, setSelectedCategory] = useState<
@@ -141,8 +142,9 @@ export function BriefingView() {
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-500">
                   Critical Decision
                 </span>
-                <span className="text-[11px] text-[var(--text-muted)] font-[500]">
-                  Slack #board-directors
+                <span className="text-[11px] text-[var(--text-muted)] font-[500] flex items-center gap-1.5">
+                  <SocialIcon name="slack" size={12} className="w-3 h-3 object-contain" />
+                  <span>Slack #board-directors</span>
                 </span>
               </div>
               <h3 className="text-sm sm:text-base font-[652] text-[var(--ink)]">
@@ -184,8 +186,9 @@ export function BriefingView() {
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400">
                   Meeting Briefing
                 </span>
-                <span className="text-[11px] text-[var(--text-muted)] font-[500]">
-                  Tomorrow • 9:30 AM EST
+                <span className="text-[11px] text-[var(--text-muted)] font-[500] flex items-center gap-1.5">
+                  <SocialIcon name="gcal" size={12} className="w-3 h-3 object-contain" />
+                  <span>Google Meet • Tomorrow 9:30 AM EST</span>
                 </span>
               </div>
               <h3 className="text-sm sm:text-base font-[652] text-[var(--ink)]">

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { DashboardTab } from "../types";
 import { cn } from "@/lib/utils";
+import { SocialIcon } from "@/components/icons/AppIcons";
 
 interface DashboardOverviewViewProps {
   onNavigateTab: (tab: DashboardTab) => void;
@@ -407,10 +408,10 @@ export function DashboardOverviewView({
             <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 bg-[var(--raised)] border border-[var(--hairline-soft)] text-[var(--ink)] flex items-center justify-center shrink-0"
+                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
                   style={{ borderRadius: "30%" }}
                 >
-                  <Mail className="w-3.5 h-3.5" />
+                  <SocialIcon name="gmail" size={14} className="w-3.5 h-3.5 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs font-[600] text-[var(--ink)]">Inbox Triager</p>
@@ -427,10 +428,10 @@ export function DashboardOverviewView({
             <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 bg-[var(--raised)] border border-[var(--hairline-soft)] text-[var(--ink)] flex items-center justify-center shrink-0"
+                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
                   style={{ borderRadius: "30%" }}
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
+                  <SocialIcon name="whatsapp" size={14} className="w-3.5 h-3.5 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs font-[600] text-[var(--ink)]">Chat Gatekeeper</p>
@@ -447,10 +448,10 @@ export function DashboardOverviewView({
             <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 bg-[var(--raised)] border border-[var(--hairline-soft)] text-[var(--ink)] flex items-center justify-center shrink-0"
+                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
                   style={{ borderRadius: "30%" }}
                 >
-                  <Calendar className="w-3.5 h-3.5" />
+                  <SocialIcon name="gcal" size={14} className="w-3.5 h-3.5 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs font-[600] text-[var(--ink)]">Calendar Assistant</p>
@@ -467,10 +468,10 @@ export function DashboardOverviewView({
             <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 bg-[var(--raised)] border border-[var(--hairline-soft)] text-[var(--ink)] flex items-center justify-center shrink-0"
+                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
                   style={{ borderRadius: "30%" }}
                 >
-                  <Newspaper className="w-3.5 h-3.5" />
+                  <SocialIcon name="notion" size={14} className="w-3.5 h-3.5 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs font-[600] text-[var(--ink)]">Briefing Analyst</p>
@@ -500,25 +501,37 @@ export function DashboardOverviewView({
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
+                <SocialIcon name="gmail" size={16} className="w-4 h-4 object-contain" />
                 <span className="font-[600] text-[var(--ink)] text-xs">Gmail</span>
-                <span className="text-[10px] text-[var(--text-muted)] ml-auto">Live</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
+                <SocialIcon name="slack" size={16} className="w-4 h-4 object-contain" />
                 <span className="font-[600] text-[var(--ink)] text-xs">Slack</span>
-                <span className="text-[10px] text-[var(--text-muted)] ml-auto">Live</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
+                <SocialIcon name="whatsapp" size={16} className="w-4 h-4 object-contain" />
                 <span className="font-[600] text-[var(--ink)] text-xs">WhatsApp</span>
-                <span className="text-[10px] text-[var(--text-muted)] ml-auto">Live</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
+                <SocialIcon name="outlook" size={16} className="w-4 h-4 object-contain" />
                 <span className="font-[600] text-[var(--ink)] text-xs">Outlook</span>
-                <span className="text-[10px] text-[var(--text-muted)] ml-auto">Live</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </div>
             </div>
           </div>
