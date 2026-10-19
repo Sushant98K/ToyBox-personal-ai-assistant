@@ -41,7 +41,7 @@ export function AuthPage(props: AuthPageProps) {
   );
 }
 
-function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPageProps) {
+function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/dashboard' }: AuthPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -72,11 +72,11 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
     async function checkAuth() {
       try {
         // insforge SDK auto-detects insforge_code in the URL and exchanges it
-        const { data, error } = await insforge.auth.getCurrentUser();
+        const { data } = await insforge.auth.getCurrentUser();
         if (data?.user && isMounted) {
-          setCurrentUser(data.user);
-          // Sync with public.users table in database
-          await syncUserWithDatabase(data.user, data.user.providers?.[0] || 'google');
+          syncUserWithDatabase(data.user, data.user.providers?.[0] || 'google');
+          window.location.replace(redirectTo || '/dashboard');
+          return;
         }
       } catch (err: any) {
         console.warn('Auth check notice:', err);
@@ -90,7 +90,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [redirectTo]);
 
   // Save/Verify user in InsForge public.users table
   const syncUserWithDatabase = async (user: any, provider: string) => {
@@ -116,8 +116,8 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
     try {
       const redirectUrl =
         typeof window !== 'undefined' && window.location.origin
-          ? `${window.location.origin}/sign-in`
-          : 'http://localhost:3000/sign-in';
+          ? `${window.location.origin}/dashboard`
+          : 'http://localhost:3000/dashboard';
 
       const { error } = await insforge.auth.signInWithOAuth('google', {
         redirectTo: redirectUrl,
@@ -172,9 +172,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         setCurrentUser(data.user);
         await syncUserWithDatabase(data.user, 'email');
         setSuccessMessage('Signed in successfully! Redirecting...');
-        setTimeout(() => {
-          router.push(redirectTo);
-        }, 1200);
+        window.location.replace(redirectTo || '/dashboard');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred during sign in');
@@ -250,9 +248,7 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
         // Save verified user in public.users database table
         await syncUserWithDatabase(data.user, 'email');
         setSuccessMessage('Account verified and saved! Redirecting...');
-        setTimeout(() => {
-          router.push(redirectTo);
-        }, 1200);
+        window.location.replace(redirectTo || '/dashboard');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to verify code');
@@ -295,6 +291,14 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
       setLoading(false);
     }
   };
+
+  if (isVerifyingExisting) {
+    return (
+      <div className="min-h-screen bg-[var(--canvas)] flex items-center justify-center">
+        <AgentWaveLoader label="Authenticating session…" />
+      </div>
+    );
+  }
 
   return (
     <main className="relative min-h-screen bg-[var(--canvas)] text-[var(--ink)] lg:grid lg:grid-cols-2 overflow-x-hidden transition-colors duration-200">
@@ -379,77 +383,9 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
             </p>
           </div>
 
-          {/* If already signed in: Display User Profile Badge */}
-          {currentUser ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-6 text-center"
-            >
-              <div className="w-16 h-16 mx-auto bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center text-2xl font-bold text-[var(--ink)] squircle-30">
-                {currentUser.profile?.avatar_url ? (
-                  <img
-                    src={currentUser.profile.avatar_url}
-                    alt={currentUser.email}
-                    className="w-full h-full object-cover squircle-30"
-                  />
-                ) : (
-                  (currentUser.name?.[0] || currentUser.email?.[0] || 'U').toUpperCase()
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs font-semibold text-[var(--ink)] mb-2">
-                  <ShieldCheckIcon className="size-3.5 text-[#0066ff]" />
-                  <span>Authenticated via InsForge</span>
-                </div>
-                <h1 className="text-2xl font-bold tracking-tight text-[var(--ink)]">
-                  Welcome back, {currentUser.name || currentUser.email?.split('@')[0]}
-                </h1>
-                <p className="text-sm text-[var(--text-muted)]">
-                  {currentUser.email}
-                </p>
-              </div>
-
-              {/* Status Alert */}
-              <div className="p-4 rounded-[16px] bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs text-[var(--text-muted)] text-left space-y-2">
-                <div className="flex items-center gap-2 font-semibold text-[var(--ink)]">
-                  <CheckCircle2Icon className="size-4 text-emerald-500" />
-                  <span>InsForge Database Synchronized</span>
-                </div>
-                <p>
-                  Your profile and session credentials have been verified and recorded in the <code className="text-[var(--ink)] font-mono">public.users</code> database table.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2.5 pt-2">
-                <Button asChild size="lg" className="w-full">
-                  <Link href="/">
-                    <span>Continue to Workspace</span>
-                    <ArrowRightIcon className="size-4 ml-1.5" />
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={handleSignOut}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <Loader2Icon className="size-4 animate-spin mr-2" />
-                  ) : (
-                    <LogOutIcon className="size-4 mr-2" />
-                  )}
-                  <span>Sign Out</span>
-                </Button>
-              </div>
-            </motion.div>
-          ) : (
-            <>
-              {/* Header Titles */}
-              <div className="space-y-2">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--ink)]">
+          {/* Header Titles */}
+          <div className="space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--ink)]">
                   {mode === 'verify-otp'
                     ? 'Verify Your Email'
                     : mode === 'sign-up'
@@ -762,8 +698,6 @@ function AuthPageContent({ initialMode = 'sign-in', redirectTo = '/' }: AuthPage
                 </a>
                 . Zero-retention and end-to-end encrypted.
               </p>
-            </>
-          )}
         </div>
       </div>
     </main>
