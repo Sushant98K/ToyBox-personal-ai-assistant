@@ -16,7 +16,8 @@ export type SocialIconName =
   | "outlook"
   | "gcal"
   | "notion"
-  | "discord";
+  | "discord"
+  | "linkedin";
 
 interface SocialIconProps extends IconProps {
   name: SocialIconName | string;
@@ -55,6 +56,9 @@ export function resolveSocialIconName(name: string): string {
       return "notion";
     case "discord":
       return "discord";
+    case "linkedin":
+    case "in":
+      return "linkedin";
     default:
       return clean;
   }
@@ -131,4 +135,8 @@ export function NotionIcon(props: IconProps) {
 
 export function DiscordIcon(props: IconProps) {
   return <SocialIcon name="discord" alt="Discord" {...props} />;
+}
+
+export function LinkedInIcon(props: IconProps) {
+  return <SocialIcon name="linkedin" alt="LinkedIn" {...props} />;
 }

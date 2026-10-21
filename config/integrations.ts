@@ -1,4 +1,4 @@
-import { Integration } from "@/types";
+import { Integration, IntegrationPlatform } from "@/types";
 
 export const supportedIntegrations: Integration[] = [
   {
@@ -6,7 +6,7 @@ export const supportedIntegrations: Integration[] = [
     name: "Gmail",
     role: "Email & Threads",
     status: "OAuth 2.0 Verified",
-    protocol: "Google Workspace API",
+    protocol: "Google Workspace API & MCP",
     type: "email",
   },
   {
@@ -14,7 +14,7 @@ export const supportedIntegrations: Integration[] = [
     name: "Slack",
     role: "Channels & DMs",
     status: "Enterprise Grid Ready",
-    protocol: "Slack Web API & Bot",
+    protocol: "Slack Web API & MCP Bot",
     type: "messaging",
   },
   {
@@ -38,8 +38,24 @@ export const supportedIntegrations: Integration[] = [
     name: "Microsoft Outlook",
     role: "Exchange & 365 Calendar",
     status: "Graph API Certified",
-    protocol: "Microsoft Graph REST",
+    protocol: "Microsoft Graph REST & MCP",
     type: "email",
+  },
+  {
+    id: "discord",
+    name: "Discord",
+    role: "Community & Channels",
+    status: "Gateway Bot Verified",
+    protocol: "Discord API v10 & MCP",
+    type: "messaging",
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    role: "InMail & Executive Network",
+    status: "Professional OAuth 2.0",
+    protocol: "LinkedIn Member API & MCP",
+    type: "workspace",
   },
   {
     id: "gcal",
@@ -54,7 +70,451 @@ export const supportedIntegrations: Integration[] = [
     name: "Notion",
     role: "Daily Logs & Task Sync",
     status: "Automated Export",
-    protocol: "Notion Integrations API",
+    protocol: "Notion Integrations API & MCP",
     type: "workspace",
   },
 ];
+
+export const platformsCatalog: IntegrationPlatform[] = [
+  {
+    id: "gmail",
+    name: "Google Workspace / Gmail",
+    role: "Autonomous classification, VIP priority flagging, and 1-click draft preparation",
+    category: "Email & Messaging",
+    type: "email",
+    description: "Autonomous classification, VIP priority flagging, and 1-click draft preparation",
+    protocol: "Google Workspace API & MCP",
+    socialIcon: "gmail",
+    defaultSyncFrequency: "Real-time Webhook",
+    defaultThroughput: "184 emails today",
+    mcpTools: [
+      {
+        name: "gmail_list_messages",
+        title: "List & Query Inbox Messages",
+        description: "Search user's Gmail inbox with query filters (e.g. is:unread, label:IMPORTANT, date ranges).",
+        category: "read",
+        parameters: [
+          { name: "query", type: "string", description: "Search query string (e.g. 'is:unread category:primary')", required: false, default: "is:unread" },
+          { name: "maxResults", type: "number", description: "Maximum number of messages to return", required: false, default: 10 },
+          { name: "includeSpamTrash", type: "boolean", description: "Include messages from SPAM and TRASH", required: false, default: false },
+        ],
+        sampleOutput: {
+          messages: [
+            { id: "msg_1849a2f1", threadId: "th_92019", snippet: "Q3 Board Deck review confirmation and feedback...", from: "sarah.chen@board.org", subject: "Urgent: Q3 Financial Sign-off", date: "10 mins ago" },
+            { id: "msg_1849a2f2", threadId: "th_92020", snippet: "Please find the revised terms for Enterprise Contract #4910...", from: "contracts@enterprise.co", subject: "Revised MSA Agreement", date: "32 mins ago" },
+          ],
+          resultSizeEstimate: 2,
+        },
+      },
+      {
+        name: "gmail_get_message",
+        title: "Retrieve Message Content",
+        description: "Fetch full message content, body text, HTML, sender headers, and attachments for a specific message ID.",
+        category: "read",
+        parameters: [
+          { name: "messageId", type: "string", description: "The ID of the Gmail message to fetch", required: true },
+          { name: "format", type: "string", description: "Format of message: 'full', 'metadata', or 'raw'", required: false, default: "full" },
+        ],
+        sampleOutput: {
+          id: "msg_1849a2f1",
+          subject: "Urgent: Q3 Financial Sign-off",
+          from: "sarah.chen@board.org",
+          bodyText: "Hi Alex,\n\nPlease review the attached slide 14 on ARR projections before 3pm.\n\nBest,\nSarah",
+        },
+      },
+      {
+        name: "gmail_create_draft",
+        title: "Prepare AI Draft Response",
+        description: "Construct a polished draft reply or new message in user's Gmail account for human review before dispatch.",
+        category: "write",
+        parameters: [
+          { name: "to", type: "string", description: "Recipient email address", required: true },
+          { name: "subject", type: "string", description: "Draft subject line", required: true },
+          { name: "body", type: "string", description: "Email body in text or HTML", required: true },
+          { name: "threadId", type: "string", description: "Optional thread ID to reply to", required: false },
+        ],
+        sampleOutput: {
+          draftId: "draft_9921af",
+          status: "Draft saved to Gmail",
+          created_at: new Date().toISOString(),
+        },
+      },
+      {
+        name: "gmail_send_message",
+        title: "Send Email Message",
+        description: "Send an email directly through the authenticated user's Gmail account.",
+        category: "write",
+        parameters: [
+          { name: "to", type: "string", description: "Recipient email address", required: true },
+          { name: "subject", type: "string", description: "Subject line", required: true },
+          { name: "body", type: "string", description: "Message body text", required: true },
+        ],
+      },
+      {
+        name: "gmail_batch_modify_labels",
+        title: "Triage & Modify Message Labels",
+        description: "Apply or remove Gmail labels, star messages, mark as read, or archive to maintain zero-inbox.",
+        category: "manage",
+        parameters: [
+          { name: "messageIds", type: "string[]", description: "Array of message IDs to modify", required: true },
+          { name: "addLabelIds", type: "string[]", description: "Labels to add (e.g. ['STARRED', 'UNREAD'])", required: false },
+          { name: "removeLabelIds", type: "string[]", description: "Labels to remove (e.g. ['UNREAD', 'INBOX'])", required: false },
+        ],
+      },
+      {
+        name: "gmail_get_user_profile",
+        title: "Get Gmail Account Profile",
+        description: "Retrieve authenticated account email address, message totals, and quota state.",
+        category: "read",
+        parameters: [],
+        sampleOutput: {
+          emailAddress: "user@workspace.com",
+          messagesTotal: 48920,
+          threadsTotal: 14210,
+          historyId: "1098234",
+        },
+      },
+    ],
+  },
+  {
+    id: "slack",
+    name: "Slack Enterprise",
+    role: "Executive channel digests, @mention triage, and thread sentiment analysis",
+    category: "Email & Messaging",
+    type: "messaging",
+    description: "Executive channel digests, @mention triage, and thread sentiment analysis",
+    protocol: "Slack Web API & Event Stream",
+    socialIcon: "slack",
+    defaultSyncFrequency: "Real-time Event API",
+    defaultThroughput: "92 messages today",
+    mcpTools: [
+      {
+        name: "slack_post_message",
+        title: "Post Message to Channel or DM",
+        description: "Send executive briefing cards, action items, or direct messages to Slack channels.",
+        category: "write",
+        parameters: [
+          { name: "channel", type: "string", description: "Channel ID or #channel name", required: true },
+          { name: "text", type: "string", description: "Message content or mrkdwn block", required: true },
+        ],
+      },
+      {
+        name: "slack_read_channel_history",
+        title: "Read Channel Messages",
+        description: "Retrieve recent conversations, mentions, and shared documents from designated channels.",
+        category: "read",
+        parameters: [
+          { name: "channel", type: "string", description: "Channel ID", required: true },
+          { name: "limit", type: "number", description: "Number of messages to ingest", required: false, default: 20 },
+        ],
+      },
+      {
+        name: "slack_get_thread_replies",
+        title: "Summarize Thread Replies",
+        description: "Fetch all replies to a specific parent message to synthesize decisions and consensus.",
+        category: "read",
+        parameters: [
+          { name: "channel", type: "string", description: "Channel ID", required: true },
+          { name: "thread_ts", type: "string", description: "Timestamp of parent message", required: true },
+        ],
+      },
+      {
+        name: "slack_add_reaction",
+        title: "React to Message",
+        description: "Acknowledge message or decision with emoji reactions (e.g. eyes, white_check_mark).",
+        category: "write",
+        parameters: [
+          { name: "channel", type: "string", description: "Channel ID", required: true },
+          { name: "timestamp", type: "string", description: "Message timestamp", required: true },
+          { name: "name", type: "string", description: "Emoji name without colons", required: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp Business API",
+    role: "Client concierge, urgent lead detection, and executive auto-acknowledgement",
+    category: "Email & Messaging",
+    type: "messaging",
+    description: "Client concierge, urgent lead detection, and executive auto-acknowledgement",
+    protocol: "Multi-Device Webhook",
+    socialIcon: "whatsapp",
+    defaultSyncFrequency: "Webhook Stream",
+    defaultThroughput: "41 chats today",
+    mcpTools: [
+      {
+        name: "whatsapp_send_message",
+        title: "Send WhatsApp Chat Message",
+        description: "Dispatch end-to-end encrypted direct message or response to client contact.",
+        category: "write",
+        parameters: [
+          { name: "recipientPhone", type: "string", description: "Phone number with international country code", required: true },
+          { name: "message", type: "string", description: "Text content of message", required: true },
+        ],
+      },
+      {
+        name: "whatsapp_get_recent_chats",
+        title: "Fetch Priority Inbound Chats",
+        description: "Scan recent incoming WhatsApp customer communications flagged for executive attention.",
+        category: "read",
+        parameters: [
+          { name: "limit", type: "number", description: "Number of chat threads to fetch", required: false, default: 15 },
+        ],
+      },
+      {
+        name: "whatsapp_send_template",
+        title: "Send Pre-Approved Business Template",
+        description: "Trigger transactional confirmations or appointment reminders using WhatsApp Business templates.",
+        category: "write",
+        parameters: [
+          { name: "templateName", type: "string", description: "Approved template name", required: true },
+          { name: "languageCode", type: "string", description: "Template language (e.g. en_US)", required: false, default: "en_US" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "outlook",
+    name: "Microsoft 365 / Outlook",
+    role: "Secondary corporate inbox routing, calendar invites, and attachment extraction",
+    category: "Email & Messaging",
+    type: "email",
+    description: "Secondary corporate inbox routing, calendar invites, and attachment extraction",
+    protocol: "Microsoft Graph REST API",
+    socialIcon: "outlook",
+    defaultSyncFrequency: "Graph API Polling",
+    defaultThroughput: "31 emails today",
+    mcpTools: [
+      {
+        name: "outlook_list_messages",
+        title: "List Outlook Messages",
+        description: "Retrieve enterprise inbox emails with Microsoft Graph OData queries.",
+        category: "read",
+        parameters: [
+          { name: "filter", type: "string", description: "OData filter query (e.g. isRead eq false)", required: false },
+          { name: "top", type: "number", description: "Number of emails to return", required: false, default: 10 },
+        ],
+      },
+      {
+        name: "outlook_send_mail",
+        title: "Send Exchange Mail",
+        description: "Send official corporate correspondence through Microsoft Graph.",
+        category: "write",
+        parameters: [
+          { name: "toRecipients", type: "string[]", description: "List of email addresses", required: true },
+          { name: "subject", type: "string", description: "Email subject", required: true },
+          { name: "content", type: "string", description: "HTML or text content", required: true },
+        ],
+      },
+      {
+        name: "outlook_create_draft",
+        title: "Create Draft Message",
+        description: "Draft corporate reply in Outlook Drafts folder.",
+        category: "write",
+        parameters: [
+          { name: "subject", type: "string", description: "Subject", required: true },
+          { name: "content", type: "string", description: "Content", required: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: "discord",
+    name: "Discord Community",
+    role: "Monitors announcement channels, VIP tester feedback, and critical incident room alerts",
+    category: "Community & Chat",
+    type: "messaging",
+    description: "Monitors announcement channels, VIP tester feedback, and critical incident room alerts",
+    protocol: "Discord Gateway & REST v10",
+    socialIcon: "discord",
+    defaultSyncFrequency: "Real-time Gateway",
+    defaultThroughput: "12 alerts today",
+    mcpTools: [
+      {
+        name: "discord_send_message",
+        title: "Post Discord Message",
+        description: "Send announcement or operational alert to specific Discord guild text channel.",
+        category: "write",
+        parameters: [
+          { name: "channelId", type: "string", description: "Target Discord channel ID", required: true },
+          { name: "content", type: "string", description: "Message text or embed", required: true },
+        ],
+      },
+      {
+        name: "discord_read_channel",
+        title: "Read Channel Messages",
+        description: "Fetch recent discussions or bug reports from Discord community channels.",
+        category: "read",
+        parameters: [
+          { name: "channelId", type: "string", description: "Channel ID", required: true },
+          { name: "limit", type: "number", description: "Message limit", required: false, default: 25 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn Network",
+    role: "InMail triage, executive connections, partnership inquiries, and post scheduling",
+    category: "Community & Chat",
+    type: "workspace",
+    description: "InMail triage, executive connections, partnership inquiries, and post scheduling",
+    protocol: "LinkedIn Member API & MCP",
+    socialIcon: "linkedin",
+    defaultSyncFrequency: "Hourly InMail Sync",
+    defaultThroughput: "18 InMails today",
+    mcpTools: [
+      {
+        name: "linkedin_get_profile",
+        title: "Retrieve Executive Profile",
+        description: "Get authenticated profile overview, connections count, and professional headline.",
+        category: "read",
+        parameters: [],
+      },
+      {
+        name: "linkedin_read_conversations",
+        title: "Fetch InMail & Messages",
+        description: "Ingest inbound executive inquiries, partnership leads, and recruiter correspondence.",
+        category: "read",
+        parameters: [
+          { name: "limit", type: "number", description: "Number of conversations to fetch", required: false, default: 10 },
+        ],
+      },
+      {
+        name: "linkedin_send_message",
+        title: "Send LinkedIn Direct Message",
+        description: "Send direct message or reply to 1st-degree connection.",
+        category: "write",
+        parameters: [
+          { name: "recipientUrn", type: "string", description: "Recipient URN or profile identifier", required: true },
+          { name: "message", type: "string", description: "Message text", required: true },
+        ],
+      },
+      {
+        name: "linkedin_publish_update",
+        title: "Publish Thought Leadership Update",
+        description: "Publish executive article summary or company update to personal feed.",
+        category: "write",
+        parameters: [
+          { name: "commentary", type: "string", description: "Post text content", required: true },
+          { name: "visibility", type: "string", description: "'PUBLIC' or 'CONNECTIONS'", required: false, default: "PUBLIC" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "telegram",
+    name: "Telegram Messenger",
+    role: "Monitors key announcement channels and VIP direct chats for operational updates",
+    category: "Email & Messaging",
+    type: "messaging",
+    description: "Monitors key announcement channels and VIP direct chats for operational updates",
+    protocol: "Telegram MTProto 2.0 API",
+    socialIcon: "telegram",
+    defaultSyncFrequency: "Real-time Bot Webhook",
+    defaultThroughput: "27 chats today",
+    mcpTools: [
+      {
+        name: "telegram_send_message",
+        title: "Send Telegram Message",
+        description: "Dispatch urgent push notification or message to a Telegram chat or channel.",
+        category: "write",
+        parameters: [
+          { name: "chatId", type: "string", description: "Telegram chat or group ID", required: true },
+          { name: "text", type: "string", description: "Message text formatted in Markdown or HTML", required: true },
+        ],
+      },
+      {
+        name: "telegram_get_updates",
+        title: "Poll Inbound Updates",
+        description: "Fetch pending commands or messages from monitored groups.",
+        category: "read",
+        parameters: [
+          { name: "limit", type: "number", description: "Max updates to retrieve", required: false, default: 20 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "gcal",
+    name: "Google Calendar & Meet",
+    role: "Meeting preparation briefs, attendee dossiers, and automatic buffer holds",
+    category: "Productivity & Docs",
+    type: "calendar",
+    description: "Meeting preparation briefs, attendee dossiers, and automatic buffer holds",
+    protocol: "Google Calendar API v3",
+    socialIcon: "gcal",
+    defaultSyncFrequency: "Bi-directional Sync",
+    defaultThroughput: "6 events today",
+    mcpTools: [
+      {
+        name: "calendar_list_events",
+        title: "Fetch Upcoming Calendar Events",
+        description: "List scheduled meetings, attendees, and video links for specified date range.",
+        category: "read",
+        parameters: [
+          { name: "timeMin", type: "string", description: "ISO date timestamp start", required: false },
+          { name: "timeMax", type: "string", description: "ISO date timestamp end", required: false },
+          { name: "maxResults", type: "number", description: "Maximum events to fetch", required: false, default: 10 },
+        ],
+      },
+      {
+        name: "calendar_create_event",
+        title: "Create Calendar Meeting",
+        description: "Schedule new meeting with automatic Google Meet video room link.",
+        category: "write",
+        parameters: [
+          { name: "summary", type: "string", description: "Event title", required: true },
+          { name: "startDateTime", type: "string", description: "Start ISO time", required: true },
+          { name: "endDateTime", type: "string", description: "End ISO time", required: true },
+          { name: "attendees", type: "string[]", description: "Attendee emails", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "notion",
+    name: "Notion Knowledge Base",
+    role: "Automatic meeting action item extraction, project status boards, and executive dossiers",
+    category: "Productivity & Docs",
+    type: "workspace",
+    description: "Automatic meeting action item extraction, project status boards, and executive dossiers",
+    protocol: "Notion Integrations API & MCP",
+    socialIcon: "notion",
+    defaultSyncFrequency: "Bi-directional Sync",
+    defaultThroughput: "14 pages today",
+    mcpTools: [
+      {
+        name: "notion_query_database",
+        title: "Query Notion Database",
+        description: "Search corporate wiki, tasks database, or executive action tracker.",
+        category: "search",
+        parameters: [
+          { name: "databaseId", type: "string", description: "Notion database UUID", required: true },
+          { name: "filter", type: "string", description: "JSON filter criteria", required: false },
+        ],
+      },
+      {
+        name: "notion_create_page",
+        title: "Create Notion Page",
+        description: "Generate structured meeting minutes or synthesized executive briefing.",
+        category: "write",
+        parameters: [
+          { name: "parentDatabaseId", type: "string", description: "Target database ID", required: true },
+          { name: "title", type: "string", description: "Page title", required: true },
+          { name: "content", type: "string", description: "Markdown body content", required: false },
+        ],
+      },
+    ],
+  },
+];
+
+export function getPlatformById(id: string): IntegrationPlatform | undefined {
+  return platformsCatalog.find((p) => p.id === id || p.socialIcon === id);
+}
+
+export function getMcpToolsForPlatform(id: string) {
+  const platform = getPlatformById(id);
+  return platform ? platform.mcpTools : [];
+}

@@ -9,3 +9,5 @@ export * from "./views/IntegrationsView";
 export * from "./views/AlertsView";
 export * from "./views/SettingsView";
 export * from "./views/PricingSettingsView";
+export * from "./integrations/GmailConnectModal";
+export * from "./integrations/IntegrationSettingsModal";

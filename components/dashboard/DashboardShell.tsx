@@ -136,7 +136,9 @@ export function DashboardShell() {
 
           {activeTab === "briefing" && <BriefingView />}
 
-          {activeTab === "integrations" && <IntegrationsView />}
+          {activeTab === "integrations" && (
+            <IntegrationsView currentUser={currentUser} />
+          )}
 
           {activeTab === "alerts" && <AlertsView />}
 

@@ -12,6 +12,37 @@ export interface Integration {
   type: "email" | "messaging" | "calendar" | "workspace";
 }
 
+export interface McpToolParameter {
+  name: string;
+  type: string;
+  description: string;
+  required?: boolean;
+  default?: string | number | boolean;
+}
+
+export interface McpToolDefinition {
+  name: string;
+  title: string;
+  description: string;
+  category: "read" | "write" | "manage" | "search";
+  parameters: McpToolParameter[];
+  sampleOutput?: Record<string, unknown> | string;
+}
+
+export interface IntegrationPlatform {
+  id: string;
+  name: string;
+  role: string;
+  category: "Email & Messaging" | "Productivity & Docs" | "Community & Chat";
+  type: "email" | "messaging" | "calendar" | "workspace";
+  description: string;
+  protocol: string;
+  socialIcon: string;
+  defaultSyncFrequency: string;
+  defaultThroughput: string;
+  mcpTools: McpToolDefinition[];
+}
+
 export interface PricingPlan {
   id: string;
   name: string;

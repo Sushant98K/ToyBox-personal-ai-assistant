@@ -1,18 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Puzzle,
-  Plus,
   Search,
-  CheckCircle2,
   RefreshCw,
   Sparkles,
+  Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SocialIcon } from "@/components/icons/AppIcons";
+import { platformsCatalog, getPlatformById } from "@/config/integrations";
+import { IntegrationPlatform } from "@/types";
+import { GmailConnectModal } from "@/components/dashboard/integrations/GmailConnectModal";
+import { IntegrationSettingsModal } from "@/components/dashboard/integrations/IntegrationSettingsModal";
 
-interface IntegrationItem {
+export interface IntegrationItem {
   id: string;
   name: string;
   category: "Email & Messaging" | "Productivity & Docs" | "Community & Chat";
@@ -22,128 +26,208 @@ interface IntegrationItem {
   syncFrequency: string;
   messagesProcessed: string;
   socialIcon: string;
+  protocol?: string;
+  accountEmail?: string | null;
+  hasCustomCredentials?: boolean;
 }
 
-export function IntegrationsView() {
-  const [filter, setFilter] = useState<"all" | "connected" | "email-messaging" | "productivity">("all");
+interface IntegrationsViewProps {
+  currentUser?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    avatar_url?: string;
+  } | null;
+}
+
+// Generate default disconnected platforms strictly from platformsCatalog
+// All platforms default to disconnected so there is never a false "Connected" flash
+const createDefaultIntegrations = (): IntegrationItem[] => {
+  return platformsCatalog.map((platform) => ({
+    id: platform.id,
+    name: platform.name,
+    category: platform.category,
+    description: platform.description,
+    status: "disconnected", // Database-backed: disconnected by default
+    lastSync: "Never",
+    syncFrequency: platform.defaultSyncFrequency,
+    messagesProcessed: "0 items",
+    socialIcon: platform.socialIcon,
+    protocol: platform.protocol,
+    accountEmail: null,
+    hasCustomCredentials: false,
+  }));
+};
+
+export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
+  const [filter, setFilter] = useState<
+    "all" | "connected" | "email-messaging" | "productivity"
+  >("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [isLoadingDb, setIsLoadingDb] = useState(true);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  const [integrations, setIntegrations] = useState<IntegrationItem[]>([
-    {
-      id: "gmail",
-      name: "Google Workspace / Gmail",
-      category: "Email & Messaging",
-      description: "Autonomous classification, VIP priority flagging, and 1-click draft preparation",
-      status: "connected",
-      lastSync: "1 min ago",
-      syncFrequency: "Real-time Webhook",
-      messagesProcessed: "184 emails today",
-      socialIcon: "gmail",
-    },
-    {
-      id: "slack",
-      name: "Slack Enterprise",
-      category: "Email & Messaging",
-      description: "Executive channel digests, @mention triage, and thread sentiment analysis",
-      status: "connected",
-      lastSync: "Just now",
-      syncFrequency: "Real-time Event API",
-      messagesProcessed: "92 messages today",
-      socialIcon: "slack",
-    },
-    {
-      id: "whatsapp",
-      name: "WhatsApp Business API",
-      category: "Email & Messaging",
-      description: "Client concierge, urgent lead detection, and executive auto-acknowledgement",
-      status: "connected",
-      lastSync: "4 mins ago",
-      syncFrequency: "Webhook Stream",
-      messagesProcessed: "41 chats today",
-      socialIcon: "whatsapp",
-    },
-    {
-      id: "outlook",
-      name: "Microsoft 365 / Outlook",
-      category: "Email & Messaging",
-      description: "Secondary corporate inbox routing, calendar invites, and attachment extraction",
-      status: "connected",
-      lastSync: "8 mins ago",
-      syncFrequency: "Graph API Polling",
-      messagesProcessed: "31 emails today",
-      socialIcon: "outlook",
-    },
-    {
-      id: "google-calendar",
-      name: "Google Calendar & Meet",
-      category: "Productivity & Docs",
-      description: "Meeting preparation briefs, attendee dossiers, and automatic buffer holds",
-      status: "connected",
-      lastSync: "12 mins ago",
-      syncFrequency: "Bi-directional Sync",
-      messagesProcessed: "6 events today",
-      socialIcon: "gcal",
-    },
-    {
-      id: "telegram",
-      name: "Telegram Messenger",
-      category: "Email & Messaging",
-      description: "Monitors key announcement channels and VIP direct chats for operational updates",
-      status: "disconnected",
-      lastSync: "Never",
-      syncFrequency: "Disabled",
-      messagesProcessed: "0 chats",
-      socialIcon: "telegram",
-    },
-    {
-      id: "notion",
-      name: "Notion Knowledge Base",
-      category: "Productivity & Docs",
-      description: "Automatic meeting action item extraction, project status boards, and executive dossiers",
-      status: "connected",
-      lastSync: "15 mins ago",
-      syncFrequency: "Bi-directional Sync",
-      messagesProcessed: "14 pages today",
-      socialIcon: "notion",
-    },
-    {
-      id: "discord",
-      name: "Discord Community",
-      category: "Community & Chat",
-      description: "Monitors announcement channels, VIP tester feedback, and critical incident room alerts",
-      status: "disconnected",
-      lastSync: "Never",
-      syncFrequency: "Disabled",
-      messagesProcessed: "0 alerts",
-      socialIcon: "discord",
-    },
-  ]);
+  // Modals state
+  const [gmailModalOpen, setGmailModalOpen] = useState(false);
+  const [settingsPlatform, setSettingsPlatform] = useState<IntegrationPlatform | null>(null);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
-  const toggleConnect = (id: string) => {
+  // Initialize state with clean disconnected platforms
+  const [integrations, setIntegrations] = useState<IntegrationItem[]>(createDefaultIntegrations);
+
+  // Fetch real database status from InsForge PostgreSQL via /api/integrations
+  const fetchDatabaseIntegrations = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (currentUser?.id) {
+        headers["x-user-id"] = currentUser.id;
+      }
+      if (currentUser?.email) {
+        headers["x-user-email"] = currentUser.email;
+      }
+
+      const res = await fetch("/api/integrations", {
+        headers,
+        cache: "no-store",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.integrations && Array.isArray(data.integrations)) {
+          setIntegrations(data.integrations);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not retrieve integration states from InsForge DB:", err);
+    } finally {
+      setIsLoadingDb(false);
+    }
+  }, [currentUser?.id, currentUser?.email]);
+
+  useEffect(() => {
+    fetchDatabaseIntegrations();
+  }, [fetchDatabaseIntegrations]);
+
+  // Connect click handler
+  const handleConnectClick = (platformId: string) => {
+    if (platformId === "gmail") {
+      setGmailModalOpen(true);
+      return;
+    }
+    toggleConnect(platformId);
+  };
+
+  // Toggle connection status and save directly in InsForge DB
+  const toggleConnect = async (id: string) => {
+    const target = integrations.find((i) => i.id === id);
+    if (!target) return;
+
+    const nextStatus = target.status === "connected" ? "disconnected" : "connected";
+    setActionInProgress(id);
+
+    // Optimistically update UI
     setIntegrations((prev) =>
       prev.map((item) =>
         item.id === id
           ? {
               ...item,
-              status: item.status === "connected" ? "disconnected" : "connected",
-              lastSync: item.status === "connected" ? "Disconnected" : "Just now",
+              status: nextStatus,
+              lastSync: nextStatus === "connected" ? "Just now" : "Never",
+              messagesProcessed:
+                nextStatus === "connected"
+                  ? item.messagesProcessed !== "0 items"
+                    ? item.messagesProcessed
+                    : "Active"
+                  : "0 items",
             }
           : item
       )
     );
+
+    // Persist to InsForge database
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (currentUser?.id) headers["x-user-id"] = currentUser.id;
+      if (currentUser?.email) headers["x-user-email"] = currentUser.email;
+
+      if (id === "gmail") {
+        await fetch("/api/integrations/gmail/mcp", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: nextStatus === "connected" ? "connect" : "disconnect",
+            credentials: {
+              accountEmail: currentUser?.email || "sushant98k@gmail.com",
+            },
+          }),
+        });
+      } else {
+        await fetch("/api/integrations", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            platformId: id,
+            status: nextStatus,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to persist integration change to InsForge:", err);
+      // Revert on error
+      fetchDatabaseIntegrations();
+    } finally {
+      setActionInProgress(null);
+    }
   };
 
-  const handleSyncAll = () => {
+  const handleOpenSettings = (platformId: string) => {
+    const platformDef = getPlatformById(platformId);
+    if (platformDef) {
+      setSettingsPlatform(platformDef);
+      setSettingsModalOpen(true);
+    }
+  };
+
+  const handleGmailConnected = (savedData: any) => {
+    setIntegrations((prev) =>
+      prev.map((item) =>
+        item.id === "gmail"
+          ? {
+              ...item,
+              status: "connected",
+              lastSync: "Just now",
+              messagesProcessed: "184 emails today",
+              accountEmail:
+                savedData?.metadata?.account_email ||
+                currentUser?.email ||
+                "sushant98k@gmail.com",
+            }
+          : item
+      )
+    );
+    // Refresh database state
+    fetchDatabaseIntegrations();
+  };
+
+  const handleSyncAll = async () => {
     setIsSyncingAll(true);
-    setTimeout(() => {
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (currentUser?.id) headers["x-user-id"] = currentUser.id;
+      if (currentUser?.email) headers["x-user-email"] = currentUser.email;
+
+      await fetch("/api/integrations/gmail/mcp", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "sync_inbox" }),
+      });
+      await fetchDatabaseIntegrations();
+    } catch (e) {
+      console.warn("Sync error:", e);
+    } finally {
       setIsSyncingAll(false);
-      setIntegrations((prev) =>
-        prev.map((item) =>
-          item.status === "connected" ? { ...item, lastSync: "Just now" } : item
-        )
-      );
-    }, 1200);
+    }
   };
 
   const filteredIntegrations = integrations.filter((item) => {
@@ -156,7 +240,8 @@ export function IntegrationsView() {
 
     if (filter === "connected") return item.status === "connected";
     if (filter === "email-messaging") return item.category === "Email & Messaging";
-    if (filter === "productivity") return item.category === "Productivity & Docs" || item.category === "Community & Chat";
+    if (filter === "productivity")
+      return item.category === "Productivity & Docs" || item.category === "Community & Chat";
 
     return true;
   });
@@ -166,20 +251,25 @@ export function IntegrationsView() {
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-200">
       {/* ─── Header Banner ─── */}
-      <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-colors">
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)]">
             <Puzzle className="w-3.5 h-3.5 text-[#0066FF]" />
             <span>Connected Communication Feeds</span>
             <span className="w-1 h-1 rounded-full bg-[var(--text-faint)]" />
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{connectedCount} Active</span>
+            <span className={cn(
+              "font-bold transition-colors",
+              connectedCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--text-muted)]"
+            )}>
+              {isLoadingDb ? "Loading..." : `${connectedCount} Active`}
+            </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">
             Multi-Platform Integration Hub
           </h2>
-          <p className="text-sm text-[var(--text-muted)] max-w-2xl font-[300]">
+          <p className="text-sm text-[var(--text-muted)] max-w-2xl font-[300] leading-relaxed">
             Connect and synchronize all your executive communication channels. ToyBox securely ingests
-            and synthesizes incoming streams with zero data training retention.
+            and synthesizes incoming streams with zero data training retention via Model Context Protocol (MCP).
           </p>
         </div>
 
@@ -188,7 +278,7 @@ export function IntegrationsView() {
             type="button"
             onClick={handleSyncAll}
             disabled={isSyncingAll}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] transition-all font-[600] text-xs sm:text-sm focus:outline-none disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] transition-all font-[600] text-xs sm:text-sm focus:outline-none disabled:opacity-50 cursor-pointer shadow-xs"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", isSyncingAll && "animate-spin text-[#0066FF]")} />
             <span>{isSyncingAll ? "Syncing..." : "Sync All"}</span>
@@ -196,10 +286,11 @@ export function IntegrationsView() {
 
           <button
             type="button"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none"
+            onClick={() => setGmailModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add Custom Channel</span>
+            <Sparkles className="w-4 h-4 text-[#0066FF]" />
+            <span>Connect Gmail MCP</span>
           </button>
         </div>
       </div>
@@ -212,9 +303,9 @@ export function IntegrationsView() {
             type="button"
             onClick={() => setFilter("all")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap",
+              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap cursor-pointer",
               filter === "all"
-                ? "bg-[var(--primary)] text-[var(--on-primary)]"
+                ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
                 : "bg-[var(--canvas-soft)] text-[var(--text-muted)] border border-[var(--hairline)] hover:text-[var(--ink)]"
             )}
           >
@@ -224,22 +315,25 @@ export function IntegrationsView() {
             type="button"
             onClick={() => setFilter("connected")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap flex items-center gap-1.5",
+              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer",
               filter === "connected"
-                ? "bg-[var(--primary)] text-[var(--on-primary)]"
+                ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
                 : "bg-[var(--canvas-soft)] text-[var(--text-muted)] border border-[var(--hairline)] hover:text-[var(--ink)]"
             )}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              connectedCount > 0 ? "bg-emerald-500" : "bg-gray-400"
+            )} />
             Connected ({connectedCount})
           </button>
           <button
             type="button"
             onClick={() => setFilter("email-messaging")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap",
+              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap cursor-pointer",
               filter === "email-messaging"
-                ? "bg-[var(--primary)] text-[var(--on-primary)]"
+                ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
                 : "bg-[var(--canvas-soft)] text-[var(--text-muted)] border border-[var(--hairline)] hover:text-[var(--ink)]"
             )}
           >
@@ -249,9 +343,9 @@ export function IntegrationsView() {
             type="button"
             onClick={() => setFilter("productivity")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap",
+              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap cursor-pointer",
               filter === "productivity"
-                ? "bg-[var(--primary)] text-[var(--on-primary)]"
+                ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
                 : "bg-[var(--canvas-soft)] text-[var(--text-muted)] border border-[var(--hairline)] hover:text-[var(--ink)]"
             )}
           >
@@ -272,19 +366,22 @@ export function IntegrationsView() {
         </div>
       </div>
 
-      {/* ─── Integrations Grid with Real Brand Squircles ─── */}
+      {/* ─── Integrations Grid ─── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredIntegrations.map((item) => {
+          const isConnected = item.status === "connected";
+          const isBusy = actionInProgress === item.id;
+
           return (
             <div
               key={item.id}
-              className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 hover:border-[var(--ink-soft)]/30 transition-all group"
+              className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 hover:border-[var(--ink-soft)]/30 transition-all group shadow-xs"
             >
               <div className="space-y-3.5">
                 <div className="flex items-start justify-between gap-3">
-                  {/* Real Downloaded Social Brand Icon in 30% Squircle */}
+                  {/* Brand Icon in iOS 30% Squircle */}
                   <div
-                    className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-2 shrink-0 transition-transform group-hover:scale-105"
+                    className="w-12 h-12 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-2 shrink-0 transition-transform group-hover:scale-105 shadow-xs"
                     style={{ borderRadius: "30%" }}
                   >
                     <SocialIcon
@@ -295,38 +392,46 @@ export function IntegrationsView() {
                     />
                   </div>
 
-                  {/* Connection Status Badge */}
+                  {/* Connection Status Badge (Real DB Status) */}
                   <span
                     className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[10px] font-[600] border flex items-center gap-1.5",
-                      item.status === "connected"
+                      "px-2.5 py-0.5 rounded-full text-[10px] font-[600] border flex items-center gap-1.5 transition-colors",
+                      isConnected
                         ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                         : "bg-[var(--canvas)] text-[var(--text-muted)] border-[var(--hairline)]"
                     )}
                   >
                     <span
                       className={cn(
-                        "w-1.5 h-1.5 rounded-full",
-                        item.status === "connected" ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+                        "w-1.5 h-1.5 rounded-full transition-colors",
+                        isConnected ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
                       )}
                     />
-                    <span>{item.status === "connected" ? "Connected" : "Disconnected"}</span>
+                    <span>{isConnected ? "Connected" : "Disconnected"}</span>
                   </span>
                 </div>
 
                 <div>
-                  <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
-                    {item.name}
-                  </h3>
+                  <div className="flex items-center justify-between gap-1">
+                    <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
+                      {item.name}
+                    </h3>
+                    {item.id === "gmail" && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
+                        MCP Enabled
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[11px] text-[var(--text-muted)] font-[500] block mt-0.5">
                     {item.category}
                   </span>
-                  <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed font-[300]">
+                  <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed font-[300] min-h-[36px]">
                     {item.description}
                   </p>
                 </div>
               </div>
 
+              {/* Status and Statistics Footer */}
               <div className="pt-3 border-t border-[var(--hairline)] space-y-2 text-xs">
                 <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                   <span>Last Synced:</span>
@@ -337,25 +442,82 @@ export function IntegrationsView() {
                   <span className="font-[600] text-[var(--ink)]">{item.messagesProcessed}</span>
                 </div>
 
-                <div className="pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleConnect(item.id)}
-                    className={cn(
-                      "w-full py-2 rounded-full text-xs font-[600] transition-all border focus:outline-none cursor-pointer",
-                      item.status === "connected"
-                        ? "bg-[var(--canvas)] text-[var(--text-muted)] hover:text-rose-500 hover:border-rose-500/30 border-[var(--hairline)]"
-                        : "bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 border-transparent shadow-xs"
-                    )}
-                  >
-                    {item.status === "connected" ? "Disconnect Channel" : "Connect Channel"}
-                  </button>
+                {/* Action Buttons: Connect vs Disconnect + Settings */}
+                <div className="pt-1.5 flex items-center gap-2">
+                  {isConnected ? (
+                    <>
+                      {/* Settings Button: Opens MCP Tools Dialog */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSettings(item.id)}
+                        className="flex-1 py-2 rounded-full text-xs font-[600] transition-all bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] flex items-center justify-center gap-1.5 cursor-pointer shadow-xs focus:outline-none"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-[#0066FF]" />
+                        <span>Settings</span>
+                      </button>
+
+                      {/* Disconnect Button */}
+                      <button
+                        type="button"
+                        onClick={() => toggleConnect(item.id)}
+                        disabled={isBusy}
+                        className="py-2 px-3.5 rounded-full text-xs font-[600] transition-all border border-[var(--hairline)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-rose-500 hover:border-rose-500/30 cursor-pointer focus:outline-none disabled:opacity-50"
+                        title="Disconnect this channel"
+                      >
+                        {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                      </button>
+                    </>
+                  ) : (
+                    /* Connect Button */
+                    <button
+                      type="button"
+                      onClick={() => handleConnectClick(item.id)}
+                      disabled={isBusy}
+                      className="w-full py-2 rounded-full text-xs font-[600] transition-all border border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 shadow-xs focus:outline-none cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isBusy ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Updating...</span>
+                        </>
+                      ) : item.id === "gmail" ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" />
+                          <span>Connect via MCP</span>
+                        </>
+                      ) : (
+                        <span>Connect Channel</span>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* ─── Modals ─── */}
+      <GmailConnectModal
+        isOpen={gmailModalOpen}
+        onClose={() => setGmailModalOpen(false)}
+        onConnected={handleGmailConnected}
+        defaultEmail={currentUser?.email || "sushant98k@gmail.com"}
+      />
+
+      <IntegrationSettingsModal
+        platform={settingsPlatform}
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        onDisconnect={(id) => toggleConnect(id)}
+        accountEmail={
+          settingsPlatform?.id === "gmail"
+            ? integrations.find((i) => i.id === "gmail")?.accountEmail || currentUser?.email || "sushant98k@gmail.com"
+            : null
+        }
+        lastSync={integrations.find((i) => i.id === settingsPlatform?.id)?.lastSync}
+        throughput={integrations.find((i) => i.id === settingsPlatform?.id)?.messagesProcessed}
+      />
     </div>
   );
 }
