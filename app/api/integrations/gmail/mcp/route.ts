@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { insforgeAdmin } from "@/lib/insforge-admin";
 import { getPlatformById } from "@/config/integrations";
 
-// Simulated executive inbox state for MCP Sandbox / Mock mode
+// Fallback high-fidelity inbox state for MCP Sandbox / Demo mode
 const SAMPLE_MESSAGES = [
   {
     id: "msg_exec_101",
@@ -12,7 +12,7 @@ const SAMPLE_MESSAGES = [
     from: "Sarah Jenkins <s.jenkins@vanguard-cap.com>",
     to: "alex.mercer@toybox-executive.ai",
     subject: "Action Required: Final Q3 Board Deck Sign-off",
-    date: new Date(Date.now() - 1000 * 60 * 14).toISOString(), // 14 mins ago
+    date: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
     bodyText: `Alex,\n\nPlease review the updated slide deck for tomorrow's quarterly board meeting. We adjusted the ARR growth target to 142% based on latest enterprise closes.\n\nKey decisions needed:\n1. Slide 14: Q3 EBITDA margin forecast sign-off\n2. Slide 18: Expansion headcount approval\n\nPlease reply or leave comments by 6pm today.\n\nBest,\nSarah Jenkins\nManaging Director | Vanguard Capital`,
     isUnread: true,
     isStarred: true,
@@ -25,7 +25,7 @@ const SAMPLE_MESSAGES = [
     from: "DocuSign System <docusign@notifications.acme.corp>",
     to: "alex.mercer@toybox-executive.ai",
     subject: "Completed: MSA & Data Processing Addendum - Acme Corp ($480k ARR)",
-    date: new Date(Date.now() - 1000 * 60 * 42).toISOString(), // 42 mins ago
+    date: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
     bodyText: `Your document has been completed by all parties.\n\nDocument: MSA & Data Processing Addendum\nSigners: Marcus Vance (VP Procurement, Acme Corp), Alex Mercer (CEO, ToyBox)\nTotal Annual Value: $480,000.00\n\nAll signatures have been cryptographically verified.`,
     isUnread: false,
     isStarred: false,
@@ -38,36 +38,14 @@ const SAMPLE_MESSAGES = [
     from: "David K. Vance <david.vance@sequoia-allies.io>",
     to: "alex.mercer@toybox-executive.ai",
     subject: "Follow-up from SaaStr + AI Infrastructure intro",
-    date: new Date(Date.now() - 1000 * 60 * 125).toISOString(), // ~2 hrs ago
+    date: new Date(Date.now() - 1000 * 60 * 125).toISOString(),
     bodyText: `Hey Alex,\n\nReally enjoyed our discussion around autonomous workflow agents. As mentioned, our VP of AI Infra is looking at integrating communication triage across Slack and Gmail for our 1,200 team members.\n\nAre you free for a quick 20-min Zoom this Thursday around 2pm PT?\n\nBest,\nDavid`,
     isUnread: true,
     isStarred: false,
   },
-  {
-    id: "msg_exec_104",
-    threadId: "th_exec_104",
-    labelIds: ["INBOX", "IMPORTANT"],
-    snippet: "AWS Production Alert: Database IOPS consumption reached 78% threshold during 04:00 UTC batch sync.",
-    from: "AWS CloudWatch <no-reply@amazon.com>",
-    to: "devops-alerts@toybox-executive.ai",
-    subject: "[Alert] RDS Postgres IOPS Spike - Resolved",
-    date: new Date(Date.now() - 1000 * 60 * 280).toISOString(),
-    bodyText: `Alarm Name: RDS-Primary-IOPS-High\nStatus: OK (was ALARM)\nReason: Metric IOPS dropped below 500 IOPS following automated query indexing optimization.`,
-    isUnread: false,
-    isStarred: false,
-  },
 ];
 
-// In-memory drafts store for MCP testing
-let userDrafts: Array<{ id: string; to: string; subject: string; body: string; createdAt: string }> = [
-  {
-    id: "draft_toybox_01",
-    to: "s.jenkins@vanguard-cap.com",
-    subject: "Re: Action Required: Final Q3 Board Deck Sign-off",
-    body: "Hi Sarah,\n\nReviewed slide 14. The revised ARR projections and EBITDA margins look solid. Sign-off approved.\n\nBest,\nAlex",
-    createdAt: new Date().toISOString(),
-  },
-];
+let sandboxDrafts: Array<{ id: string; to: string; subject: string; body: string; createdAt: string }> = [];
 
 // Helper to resolve the user
 async function resolveUserId(request: NextRequest): Promise<string> {
@@ -106,8 +84,76 @@ async function resolveUserId(request: NextRequest): Promise<string> {
   return "00000000-0000-0000-0000-000000000000";
 }
 
+// Retrieves valid Google Access Token for the user, refreshing if needed
+async function getValidGoogleAccessToken(userId: string): Promise<string | null> {
+  try {
+    const { data: integration } = await insforgeAdmin
+      .database
+      .from("user_integrations")
+      .select("credentials, metadata, status")
+      .eq("user_id", userId)
+      .eq("platform_id", "gmail")
+      .maybeSingle();
+
+    if (!integration || integration.status !== "connected") {
+      return null;
+    }
+
+    const creds = integration.credentials || {};
+    let accessToken = creds.access_token;
+    const refreshToken = creds.refresh_token;
+    const expiresAt = creds.expires_at || 0;
+
+    // Check if token is expired or expiring in under 2 minutes
+    const isExpired = Date.now() > expiresAt - 120000;
+
+    if ((!accessToken || isExpired) && refreshToken) {
+      const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+
+      if (clientId && clientSecret) {
+        const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            grant_type: "refresh_token",
+          }),
+        });
+
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          accessToken = refreshData.access_token;
+          const newExpiresAt = Date.now() + (refreshData.expires_in || 3600) * 1000;
+
+          // Update InsForge DB with new access token
+          await insforgeAdmin
+            .database
+            .from("user_integrations")
+            .update({
+              credentials: {
+                ...creds,
+                access_token: accessToken,
+                expires_at: newExpiresAt,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId)
+            .eq("platform_id", "gmail");
+        }
+      }
+    }
+
+    return accessToken || null;
+  } catch (err) {
+    console.warn("Could not get Google Access Token:", err);
+    return null;
+  }
+}
+
 // GET /api/integrations/gmail/mcp
-// Returns MCP server metadata and tool specifications
 export async function GET(request: NextRequest) {
   const gmailPlatform = getPlatformById("gmail");
   const tools = gmailPlatform?.mcpTools || [];
@@ -116,7 +162,8 @@ export async function GET(request: NextRequest) {
     mcpVersion: "1.0.0",
     serverName: "toybox-gmail-mcp-server",
     protocol: "mcp/1.0",
-    description: "Model Context Protocol (MCP) server for Gmail integration. Exposes inbox queries, message retrieval, and draft preparation.",
+    description:
+      "Model Context Protocol (MCP) server for Gmail integration. Exposes inbox queries, message retrieval, and draft preparation.",
     tools: tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -137,11 +184,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/integrations/gmail/mcp
-// Main handler for MCP operations: list_tools, call_tool, verify_credentials, connect, disconnect
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, tool_name, arguments: toolArgs, credentials, search } = body;
+    const { action, tool_name, arguments: toolArgs, credentials } = body;
     const userId = await resolveUserId(request);
 
     // 1. Action: List Tools
@@ -162,7 +208,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result = await executeGmailMcpTool(tool_name, toolArgs || {}, credentials);
+      const result = await executeGmailMcpTool(tool_name, toolArgs || {}, userId, credentials);
       return NextResponse.json({
         success: true,
         tool: tool_name,
@@ -170,63 +216,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 3. Action: Connect Gmail via MCP & Persist in InsForge
-    if (action === "connect") {
-      const now = new Date().toISOString();
-      const accountEmail = credentials?.accountEmail || "sushant98k@gmail.com";
-
-      const payload = {
-        user_id: userId,
-        platform_id: "gmail",
-        platform_name: "Google Workspace / Gmail",
-        status: "connected",
-        auth_type: "mcp_oauth",
-        credentials: credentials || {
-          mode: "mcp_sandbox_verified",
-          client_id: credentials?.client_id || "gmail-mcp-client-id.apps.googleusercontent.com",
-          configured_at: now,
-        },
-        metadata: {
-          account_email: accountEmail,
-          mcp_connected: true,
-          scopes: [
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.compose",
-            "https://www.googleapis.com/auth/gmail.modify",
-          ],
-        },
-        last_synced_at: now,
-        sync_frequency: "Real-time Webhook",
-        messages_processed: "184 emails today",
-        updated_at: now,
-      };
-
-      const { data, error } = await insforgeAdmin
-        .database
-        .from("user_integrations")
-        .upsert([payload], { onConflict: "user_id,platform_id" })
-        .select()
-        .single();
-
-      if (error) {
-        console.error("InsForge DB error during Gmail connect:", error);
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Gmail connected successfully via MCP",
-        integration: data || payload,
-      });
-    }
-
-    // 4. Action: Disconnect Gmail
+    // 3. Action: Disconnect Gmail
     if (action === "disconnect") {
       const now = new Date().toISOString();
-      const { data, error } = await insforgeAdmin
+      const { data } = await insforgeAdmin
         .database
         .from("user_integrations")
         .update({
           status: "disconnected",
+          credentials: {},
           last_synced_at: null,
           messages_processed: "0 items",
           updated_at: now,
@@ -243,28 +241,91 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 5. Action: Sync Inbox & update InsForge
+    // 4. Action: Sync Inbox
     if (action === "sync_inbox") {
       const now = new Date().toISOString();
-      const unreadCount = SAMPLE_MESSAGES.filter((m) => m.isUnread).length;
-      const totalMessages = SAMPLE_MESSAGES.length + 180;
+      const realToken = await getValidGoogleAccessToken(userId);
 
-      await insforgeAdmin
-        .database
-        .from("user_integrations")
-        .update({
-          last_synced_at: now,
-          messages_processed: `${totalMessages} emails today (${unreadCount} unread)`,
-          updated_at: now,
-        })
-        .eq("user_id", userId)
-        .eq("platform_id", "gmail");
+      if (realToken) {
+        try {
+          // Fetch real profile from Google API
+          const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+            headers: { Authorization: `Bearer ${realToken}` },
+          });
 
+          // Fetch recent real messages
+          const listRes = await fetch(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=5",
+            { headers: { Authorization: `Bearer ${realToken}` } }
+          );
+
+          let realMessagesList: any[] = [];
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            const messageIds = listData.messages || [];
+
+            realMessagesList = await Promise.all(
+              messageIds.slice(0, 5).map(async (m: any) => {
+                const itemRes = await fetch(
+                  `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+                  { headers: { Authorization: `Bearer ${realToken}` } }
+                );
+                if (itemRes.ok) {
+                  const item = await itemRes.json();
+                  const headers = item.payload?.headers || [];
+                  const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject";
+                  const from = headers.find((h: any) => h.name === "From")?.value || "Unknown";
+                  const date = headers.find((h: any) => h.name === "Date")?.value || "";
+                  return {
+                    id: item.id,
+                    threadId: item.threadId,
+                    snippet: item.snippet,
+                    from,
+                    subject,
+                    date,
+                    bodyText: item.snippet,
+                    isUnread: item.labelIds?.includes("UNREAD") ?? false,
+                  };
+                }
+                return null;
+              })
+            );
+            realMessagesList = realMessagesList.filter(Boolean);
+          }
+
+          let messagesTotal = 184;
+          if (profileRes.ok) {
+            const profile = await profileRes.json();
+            messagesTotal = profile.messagesTotal || 184;
+          }
+
+          await insforgeAdmin
+            .database
+            .from("user_integrations")
+            .update({
+              last_synced_at: now,
+              messages_processed: `${messagesTotal} emails in Gmail (${realMessagesList.length} recent synced)`,
+              updated_at: now,
+            })
+            .eq("user_id", userId)
+            .eq("platform_id", "gmail");
+
+          return NextResponse.json({
+            success: true,
+            isRealData: true,
+            syncedAt: now,
+            messages: realMessagesList.length > 0 ? realMessagesList : SAMPLE_MESSAGES,
+          });
+        } catch (e) {
+          console.warn("Real Gmail sync failed, fallback to sandbox:", e);
+        }
+      }
+
+      // Sandbox Fallback
       return NextResponse.json({
         success: true,
+        isRealData: false,
         syncedAt: now,
-        unreadCount,
-        totalMessages,
         messages: SAMPLE_MESSAGES,
       });
     }
@@ -282,81 +343,291 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Executes an individual MCP tool
+// Executes an individual MCP tool using real Google APIs or verified MCP sandbox
 async function executeGmailMcpTool(
   toolName: string,
   args: Record<string, any>,
-  credentials?: Record<string, any>
+  userId: string,
+  explicitCredentials?: Record<string, any>
 ) {
-  // If user provided a custom refresh token and client credentials, attempt real Google API call
-  const clientId = credentials?.clientId || process.env.GMAIL_CLIENT_ID;
-  const clientSecret = credentials?.clientSecret || process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = credentials?.refreshToken || process.env.GMAIL_REFRESH_TOKEN;
+  // Check for real Google access token
+  const token =
+    explicitCredentials?.accessToken ||
+    (await getValidGoogleAccessToken(userId));
 
-  if (clientId && clientSecret && refreshToken) {
+  if (token) {
     try {
-      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          grant_type: "refresh_token",
-        }),
-      });
+      // 1. gmail_list_messages
+      if (toolName === "gmail_list_messages") {
+        const query = encodeURIComponent(args.query || "is:unread");
+        const maxResults = args.maxResults || 10;
+        const apiRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
-        const accessToken = tokenData.access_token;
+        if (apiRes.ok) {
+          const listData = await apiRes.json();
+          const msgs = listData.messages || [];
 
-        // Route real Google Gmail API call
-        if (toolName === "gmail_list_messages") {
-          const q = encodeURIComponent(args.query || "is:unread");
-          const maxResults = args.maxResults || 10;
-          const apiRes = await fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=${maxResults}`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+          // Retrieve summaries for the top messages
+          const messageDetails = await Promise.all(
+            msgs.slice(0, 8).map(async (m: any) => {
+              const dRes = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              if (dRes.ok) {
+                const item = await dRes.json();
+                const headers = item.payload?.headers || [];
+                return {
+                  id: item.id,
+                  threadId: item.threadId,
+                  snippet: item.snippet,
+                  subject: headers.find((h: any) => h.name === "Subject")?.value || "(No Subject)",
+                  from: headers.find((h: any) => h.name === "From")?.value || "Unknown",
+                  date: headers.find((h: any) => h.name === "Date")?.value || "",
+                  labelIds: item.labelIds,
+                };
+              }
+              return { id: m.id, threadId: m.threadId };
+            })
           );
-          if (apiRes.ok) {
-            const data = await apiRes.json();
-            return {
-              mcpOutput: {
-                content: [
-                  {
-                    type: "text",
-                    text: `Found ${data.messages?.length || 0} messages matching query '${args.query || "is:unread"}'`,
-                  },
-                  {
-                    type: "json",
-                    data,
-                  },
-                ],
-              },
-            };
-          }
-        }
 
-        if (toolName === "gmail_get_user_profile") {
-          const apiRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (apiRes.ok) {
-            const data = await apiRes.json();
-            return {
-              mcpOutput: {
-                content: [{ type: "json", data }],
-              },
-            };
-          }
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Found ${listData.resultSizeEstimate ?? msgs.length} real Gmail messages matching '${args.query || "is:unread"}'. Retrieved metadata for ${messageDetails.length} messages.`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  messages: messageDetails,
+                  resultSizeEstimate: listData.resultSizeEstimate,
+                  nextPageToken: listData.nextPageToken,
+                },
+              ],
+            },
+          };
         }
       }
-    } catch (googleApiErr) {
-      console.warn("Notice: Real Google API fallback to high-fidelity MCP Sandbox:", googleApiErr);
+
+      // 2. gmail_get_message
+      if (toolName === "gmail_get_message") {
+        const messageId = args.messageId;
+        const apiRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (apiRes.ok) {
+          const msg = await apiRes.json();
+          const headers = msg.payload?.headers || [];
+          const subject = headers.find((h: any) => h.name === "Subject")?.value || "(No Subject)";
+          const from = headers.find((h: any) => h.name === "From")?.value || "Unknown";
+          const to = headers.find((h: any) => h.name === "To")?.value || "";
+          const date = headers.find((h: any) => h.name === "Date")?.value || "";
+
+          // Extract text body
+          let bodyText = msg.snippet || "";
+          if (msg.payload?.body?.data) {
+            bodyText = Buffer.from(msg.payload.body.data, "base64url").toString("utf-8");
+          } else if (msg.payload?.parts) {
+            const textPart = msg.payload.parts.find((p: any) => p.mimeType === "text/plain");
+            if (textPart?.body?.data) {
+              bodyText = Buffer.from(textPart.body.data, "base64url").toString("utf-8");
+            }
+          }
+
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Subject: ${subject}\nFrom: ${from}\nTo: ${to}\nDate: ${date}`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  id: msg.id,
+                  threadId: msg.threadId,
+                  subject,
+                  from,
+                  to,
+                  date,
+                  snippet: msg.snippet,
+                  bodyText,
+                  labelIds: msg.labelIds,
+                },
+              ],
+            },
+          };
+        }
+      }
+
+      // 3. gmail_create_draft
+      if (toolName === "gmail_create_draft") {
+        const rawContent = [
+          `To: ${args.to}`,
+          `Subject: ${args.subject}`,
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          args.body,
+        ].join("\r\n");
+
+        const raw = Buffer.from(rawContent).toString("base64url");
+        const apiRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: {
+              raw,
+              ...(args.threadId ? { threadId: args.threadId } : {}),
+            },
+          }),
+        });
+
+        if (apiRes.ok) {
+          const draft = await apiRes.json();
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Executive draft successfully created in user's Gmail Drafts folder. Draft ID: ${draft.id}`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  draftId: draft.id,
+                  messageId: draft.message?.id,
+                  to: args.to,
+                  subject: args.subject,
+                  status: "SAVED_TO_GMAIL_DRAFTS",
+                },
+              ],
+            },
+          };
+        }
+      }
+
+      // 4. gmail_send_message
+      if (toolName === "gmail_send_message") {
+        const rawContent = [
+          `To: ${args.to}`,
+          `Subject: ${args.subject}`,
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          args.body,
+        ].join("\r\n");
+
+        const raw = Buffer.from(rawContent).toString("base64url");
+        const apiRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ raw }),
+        });
+
+        if (apiRes.ok) {
+          const result = await apiRes.json();
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Email successfully sent to ${args.to} via authenticated Gmail account. Message ID: ${result.id}`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  status: "SENT",
+                  id: result.id,
+                  threadId: result.threadId,
+                  labelIds: result.labelIds,
+                },
+              ],
+            },
+          };
+        }
+      }
+
+      // 5. gmail_batch_modify_labels
+      if (toolName === "gmail_batch_modify_labels") {
+        const apiRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/batchModify", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ids: args.messageIds || [],
+            addLabelIds: args.addLabelIds || [],
+            removeLabelIds: args.removeLabelIds || [],
+          }),
+        });
+
+        if (apiRes.ok || apiRes.status === 204) {
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Labels updated for ${args.messageIds?.length || 0} messages in Gmail inbox.`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  updatedCount: args.messageIds?.length || 0,
+                  status: "COMPLETED",
+                },
+              ],
+            },
+          };
+        }
+      }
+
+      // 6. gmail_get_user_profile
+      if (toolName === "gmail_get_user_profile") {
+        const apiRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (apiRes.ok) {
+          const profile = await apiRes.json();
+          return {
+            mcpOutput: {
+              content: [
+                {
+                  type: "text",
+                  text: `Authenticated Gmail Account: ${profile.emailAddress} (${profile.messagesTotal} messages, ${profile.threadsTotal} threads).`,
+                },
+                {
+                  type: "json",
+                  source: "Google Workspace / Gmail Live API",
+                  emailAddress: profile.emailAddress,
+                  messagesTotal: profile.messagesTotal,
+                  threadsTotal: profile.threadsTotal,
+                  historyId: profile.historyId,
+                },
+              ],
+            },
+          };
+        }
+      }
+    } catch (realApiErr: any) {
+      console.warn("Live Google API call encountered an error, falling back to sandbox:", realApiErr);
     }
   }
 
-  // MCP Execution (Sandbox / Configured Local Mode)
+  // MCP Sandbox / Demo Execution (when not yet connected to real Google account)
   switch (toolName) {
     case "gmail_list_messages": {
       const query = (args.query || "").toLowerCase();
@@ -364,22 +635,18 @@ async function executeGmailMcpTool(
       if (query.includes("unread") || query.includes("is:unread")) {
         filtered = filtered.filter((m) => m.isUnread);
       }
-      if (query.includes("vip") || query.includes("important")) {
-        filtered = filtered.filter((m) => m.labelIds.includes("IMPORTANT") || m.labelIds.includes("VIP"));
-      }
-
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Retrieved ${filtered.length} inbox messages matching filter '${args.query || "is:unread"}'.`,
+              text: `[MCP Sandbox] Retrieved ${filtered.length} inbox messages matching filter '${args.query || "is:unread"}'. Connect your real Gmail account with OAuth to read live messages.`,
             },
             {
               type: "json",
               messages: filtered,
               resultSizeEstimate: filtered.length,
-              source: "Gmail MCP Ingestion Stream",
+              source: "Gmail MCP Ingestion Stream (Sandbox Mode)",
             },
           ],
         },
@@ -393,11 +660,12 @@ async function executeGmailMcpTool(
           content: [
             {
               type: "text",
-              text: `Subject: ${msg.subject}\nFrom: ${msg.from}\nDate: ${msg.date}`,
+              text: `[MCP Sandbox] Subject: ${msg.subject}\nFrom: ${msg.from}\nDate: ${msg.date}`,
             },
             {
               type: "json",
               message: msg,
+              source: "Gmail MCP Ingestion Stream (Sandbox Mode)",
             },
           ],
         },
@@ -412,18 +680,19 @@ async function executeGmailMcpTool(
         body: args.body || "AI prepared executive draft.",
         createdAt: new Date().toISOString(),
       };
-      userDrafts.push(newDraft);
+      sandboxDrafts.push(newDraft);
 
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Draft created successfully with ID ${newDraft.id} in Gmail Drafts folder.`,
+              text: `[MCP Sandbox] Draft prepared with ID ${newDraft.id} for ${newDraft.to}. Connect your real Gmail account with OAuth to write drafts directly to your Gmail account.`,
             },
             {
               type: "json",
               draft: newDraft,
+              source: "Gmail MCP Ingestion Stream (Sandbox Mode)",
             },
           ],
         },
@@ -436,12 +705,12 @@ async function executeGmailMcpTool(
           content: [
             {
               type: "text",
-              text: `Email dispatched successfully to ${args.to} with subject "${args.subject}".`,
+              text: `[MCP Sandbox] Email dispatched to ${args.to} with subject "${args.subject}". Connect real Gmail to send actual emails.`,
             },
             {
               type: "json",
               status: "SENT",
-              id: `msg_sent_${Date.now()}`,
+              id: `msg_sandbox_${Date.now()}`,
               timestamp: new Date().toISOString(),
             },
           ],
@@ -450,20 +719,16 @@ async function executeGmailMcpTool(
     }
 
     case "gmail_batch_modify_labels": {
-      const messageIds = args.messageIds || [];
-      const addLabels = args.addLabelIds || [];
-      const removeLabels = args.removeLabelIds || [];
-
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Successfully updated labels for ${messageIds.length} messages. Added: [${addLabels.join(", ")}], Removed: [${removeLabels.join(", ")}].`,
+              text: `[MCP Sandbox] Successfully updated labels for ${args.messageIds?.length || 1} messages.`,
             },
             {
               type: "json",
-              updatedCount: messageIds.length,
+              updatedCount: args.messageIds?.length || 1,
               status: "COMPLETED",
             },
           ],
@@ -477,11 +742,11 @@ async function executeGmailMcpTool(
           content: [
             {
               type: "text",
-              text: "Authenticated user: sushant98k@gmail.com (184 emails processed today)",
+              text: "[MCP Sandbox] Profile: sushant98k@gmail.com (Connect real Google account to fetch live metrics).",
             },
             {
               type: "json",
-              emailAddress: credentials?.accountEmail || "sushant98k@gmail.com",
+              emailAddress: "sushant98k@gmail.com",
               messagesTotal: 48920,
               threadsTotal: 14210,
               historyId: "1098234",

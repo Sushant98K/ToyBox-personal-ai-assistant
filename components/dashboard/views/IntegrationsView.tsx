@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Puzzle,
   Search,
@@ -8,12 +9,14 @@ import {
   Sparkles,
   Settings,
   ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SocialIcon } from "@/components/icons/AppIcons";
 import { platformsCatalog, getPlatformById } from "@/config/integrations";
 import { IntegrationPlatform } from "@/types";
-import { GmailConnectModal } from "@/components/dashboard/integrations/GmailConnectModal";
 import { IntegrationSettingsModal } from "@/components/dashboard/integrations/IntegrationSettingsModal";
 
 export interface IntegrationItem {
@@ -107,6 +110,7 @@ export function IntegrationCardSkeleton() {
 }
 
 export function IntegrationsView({ currentUser, onSyncCountChange }: IntegrationsViewProps) {
+  const searchParams = useSearchParams();
   const [filter, setFilter] = useState<
     "all" | "connected" | "email-messaging" | "productivity"
   >("all");
@@ -114,9 +118,13 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [isLoadingDb, setIsLoadingDb] = useState(true);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+    email?: string;
+  } | null>(null);
 
   // Modals state
-  const [gmailModalOpen, setGmailModalOpen] = useState(false);
   const [settingsPlatform, setSettingsPlatform] = useState<IntegrationPlatform | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
@@ -158,10 +166,73 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     fetchDatabaseIntegrations();
   }, [fetchDatabaseIntegrations]);
 
-  // Connect click handler
-  const handleConnectClick = (platformId: string) => {
+  // Handle Google OAuth callback redirect notification
+  useEffect(() => {
+    const connectedParam = searchParams.get("connected");
+    const emailParam = searchParams.get("email");
+    const errorParam = searchParams.get("error");
+
+    if (connectedParam === "gmail") {
+      setOauthStatus({
+        type: "success",
+        message: "Google Workspace / Gmail successfully connected via MCP!",
+        email: emailParam || undefined,
+      });
+      fetchDatabaseIntegrations();
+      // Clean query params from URL without refreshing
+      if (typeof window !== "undefined") {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("connected");
+        newUrl.searchParams.delete("email");
+        window.history.replaceState({}, "", newUrl.toString());
+      }
+    } else if (errorParam) {
+      setOauthStatus({
+        type: "error",
+        message: `Google OAuth connection could not be completed: ${errorParam}`,
+      });
+      if (typeof window !== "undefined") {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("error");
+        window.history.replaceState({}, "", newUrl.toString());
+      }
+    }
+  }, [searchParams, fetchDatabaseIntegrations]);
+
+  // Connect click handler - directly opens Google account selection without any intermediate modal
+  const handleConnectClick = async (platformId: string) => {
     if (platformId === "gmail") {
-      setGmailModalOpen(true);
+      setActionInProgress("gmail");
+      try {
+        const currentUrl =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/dashboard?tab=integrations";
+        const res = await fetch(
+          `/api/auth/gmail?format=json&userId=${encodeURIComponent(currentUser?.id || "")}&returnUrl=${encodeURIComponent(currentUrl)}`
+        );
+        const data = await res.json();
+
+        if (!res.ok || !data.configured || !data.url) {
+          setOauthStatus({
+            type: "error",
+            message:
+              data.error ||
+              "Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file to connect Gmail.",
+          });
+          setActionInProgress(null);
+          return;
+        }
+
+        // Navigate immediately to Google's account selection window
+        window.location.href = data.url;
+      } catch (err: any) {
+        setOauthStatus({
+          type: "error",
+          message: err.message || "Failed to initiate Google account connection.",
+        });
+        setActionInProgress(null);
+      }
       return;
     }
     toggleConnect(platformId);
@@ -305,6 +376,41 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-200">
+      {/* ─── OAuth Status Banner ─── */}
+      {oauthStatus && (
+        <div
+          className={cn(
+            "p-4 rounded-[20px] text-xs flex items-center justify-between gap-3 animate-in fade-in duration-200 border",
+            oauthStatus.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+              : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+          )}
+        >
+          <div className="flex items-center gap-2.5">
+            {oauthStatus.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            )}
+            <div>
+              <span className="font-[600]">{oauthStatus.message}</span>
+              {oauthStatus.email && (
+                <span className="block text-[11px] opacity-80 mt-0.5">
+                  Connected account: {oauthStatus.email}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOauthStatus(null)}
+            className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* ─── Header Banner ─── */}
       <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-colors">
         <div className="space-y-2">
@@ -348,11 +454,18 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
 
           <button
             type="button"
-            onClick={() => setGmailModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none cursor-pointer"
+            onClick={() => handleConnectClick("gmail")}
+            disabled={isSyncingAll || isLoadingDb || actionInProgress === "gmail"}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none cursor-pointer disabled:opacity-50"
           >
-            <Sparkles className="w-4 h-4 text-[#0066FF]" />
-            <span>Connect Gmail MCP</span>
+            {actionInProgress === "gmail" ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Connecting...</span>
+              </>
+            ) : (
+              <span>Connect</span>
+            )}
           </button>
         </div>
       </div>
@@ -578,15 +691,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                         {isBusy ? (
                           <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Updating...</span>
-                          </>
-                        ) : item.id === "gmail" ? (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" />
-                            <span>Connect via MCP</span>
+                            <span>Connecting...</span>
                           </>
                         ) : (
-                          <span>Connect Channel</span>
+                          <span>Connect</span>
                         )}
                       </button>
                     )}
@@ -599,13 +707,6 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
       )}
 
       {/* ─── Modals ─── */}
-      <GmailConnectModal
-        isOpen={gmailModalOpen}
-        onClose={() => setGmailModalOpen(false)}
-        onConnected={handleGmailConnected}
-        defaultEmail={currentUser?.email || "sushant98k@gmail.com"}
-      />
-
       <IntegrationSettingsModal
         platform={settingsPlatform}
         isOpen={settingsModalOpen}
