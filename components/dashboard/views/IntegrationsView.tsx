@@ -38,6 +38,7 @@ interface IntegrationsViewProps {
     email?: string;
     avatar_url?: string;
   } | null;
+  onSyncCountChange?: (count: number) => void;
 }
 
 // Generate default disconnected platforms strictly from platformsCatalog
@@ -59,7 +60,53 @@ const createDefaultIntegrations = (): IntegrationItem[] => {
   }));
 };
 
-export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
+// Shimmering Skeleton for Integration Cards matching exact dimensions and tokens
+export function IntegrationCardSkeleton() {
+  return (
+    <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 shadow-xs select-none">
+      <div className="space-y-3.5">
+        {/* Top squircle icon & status badge */}
+        <div className="flex items-start justify-between gap-3">
+          <div
+            className="w-12 h-12 bg-[var(--field)] border border-[var(--hairline)] shrink-0 animate-pulse"
+            style={{ borderRadius: "30%" }}
+          />
+          <div className="h-5 w-24 rounded-full bg-[var(--field)] border border-[var(--hairline)] animate-pulse" />
+        </div>
+
+        {/* Title, Category & Description */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="h-5 w-36 rounded-md bg-[var(--field)] animate-pulse" />
+            <div className="h-4 w-16 rounded-full bg-[var(--field)]/60 animate-pulse" />
+          </div>
+          <div className="h-3 w-24 rounded-md bg-[var(--field)]/70 animate-pulse" />
+          <div className="pt-1 space-y-1.5 min-h-[36px]">
+            <div className="h-3 w-full rounded-md bg-[var(--field)]/50 animate-pulse" />
+            <div className="h-3 w-4/5 rounded-md bg-[var(--field)]/40 animate-pulse" />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer metadata & Action button */}
+      <div className="pt-3 border-t border-[var(--hairline)] space-y-2 text-xs">
+        <div className="flex items-center justify-between text-[11px]">
+          <div className="h-3 w-16 rounded-md bg-[var(--field)]/60 animate-pulse" />
+          <div className="h-3 w-14 rounded-md bg-[var(--field)] animate-pulse" />
+        </div>
+        <div className="flex items-center justify-between text-[11px]">
+          <div className="h-3 w-16 rounded-md bg-[var(--field)]/60 animate-pulse" />
+          <div className="h-3 w-20 rounded-md bg-[var(--field)] animate-pulse" />
+        </div>
+        <div className="pt-1.5">
+          <div className="w-full h-8 rounded-full bg-[var(--field)] border border-[var(--hairline)] animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function IntegrationsView({ currentUser, onSyncCountChange }: IntegrationsViewProps) {
   const [filter, setFilter] = useState<
     "all" | "connected" | "email-messaging" | "productivity"
   >("all");
@@ -96,6 +143,8 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
         const data = await res.json();
         if (data.integrations && Array.isArray(data.integrations)) {
           setIntegrations(data.integrations);
+          const count = data.integrations.filter((i: any) => i.status === "connected").length;
+          onSyncCountChange?.(count);
         }
       }
     } catch (err) {
@@ -103,7 +152,7 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
     } finally {
       setIsLoadingDb(false);
     }
-  }, [currentUser?.id, currentUser?.email]);
+  }, [currentUser?.id, currentUser?.email, onSyncCountChange]);
 
   useEffect(() => {
     fetchDatabaseIntegrations();
@@ -123,12 +172,12 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
     const target = integrations.find((i) => i.id === id);
     if (!target) return;
 
-    const nextStatus = target.status === "connected" ? "disconnected" : "connected";
+    const nextStatus: "connected" | "disconnected" = target.status === "connected" ? "disconnected" : "connected";
     setActionInProgress(id);
 
     // Optimistically update UI
-    setIntegrations((prev) =>
-      prev.map((item) =>
+    setIntegrations((prev) => {
+      const next: IntegrationItem[] = prev.map((item) =>
         item.id === id
           ? {
               ...item,
@@ -142,8 +191,11 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
                   : "0 items",
             }
           : item
-      )
-    );
+      );
+      const count = next.filter((i) => i.status === "connected").length;
+      onSyncCountChange?.(count);
+      return next;
+    });
 
     // Persist to InsForge database
     try {
@@ -190,12 +242,12 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
   };
 
   const handleGmailConnected = (savedData: any) => {
-    setIntegrations((prev) =>
-      prev.map((item) =>
+    setIntegrations((prev) => {
+      const next: IntegrationItem[] = prev.map((item) =>
         item.id === "gmail"
           ? {
               ...item,
-              status: "connected",
+              status: "connected" as const,
               lastSync: "Just now",
               messagesProcessed: "184 emails today",
               accountEmail:
@@ -204,8 +256,11 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
                 "sushant98k@gmail.com",
             }
           : item
-      )
-    );
+      );
+      const count = next.filter((i) => i.status === "connected").length;
+      onSyncCountChange?.(count);
+      return next;
+    });
     // Refresh database state
     fetchDatabaseIntegrations();
   };
@@ -257,12 +312,19 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
             <Puzzle className="w-3.5 h-3.5 text-[#0066FF]" />
             <span>Connected Communication Feeds</span>
             <span className="w-1 h-1 rounded-full bg-[var(--text-faint)]" />
-            <span className={cn(
-              "font-bold transition-colors",
-              connectedCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--text-muted)]"
-            )}>
-              {isLoadingDb ? "Loading..." : `${connectedCount} Active`}
-            </span>
+            {isLoadingDb ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-14 h-3.5 rounded-full bg-[var(--field)] animate-pulse inline-block" />
+              </span>
+            ) : (
+              <span className={cn(
+                "font-bold transition-colors",
+                connectedCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--text-muted)]"
+              )}>
+                {connectedCount} Active
+              </span>
+            )}
           </div>
           <h2 className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">
             Multi-Platform Integration Hub
@@ -277,7 +339,7 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
           <button
             type="button"
             onClick={handleSyncAll}
-            disabled={isSyncingAll}
+            disabled={isSyncingAll || isLoadingDb}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] transition-all font-[600] text-xs sm:text-sm focus:outline-none disabled:opacity-50 cursor-pointer shadow-xs"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", isSyncingAll && "animate-spin text-[#0066FF]")} />
@@ -303,13 +365,18 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
             type="button"
             onClick={() => setFilter("all")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap cursor-pointer",
+              "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5",
               filter === "all"
                 ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
                 : "bg-[var(--canvas-soft)] text-[var(--text-muted)] border border-[var(--hairline)] hover:text-[var(--ink)]"
             )}
           >
-            All Channels ({integrations.length})
+            <span>All Channels</span>
+            {isLoadingDb ? (
+              <span className="w-4 h-3 rounded-full bg-[var(--field)] animate-pulse inline-block" />
+            ) : (
+              <span>({integrations.length})</span>
+            )}
           </button>
           <button
             type="button"
@@ -325,7 +392,12 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
               "w-1.5 h-1.5 rounded-full",
               connectedCount > 0 ? "bg-emerald-500" : "bg-gray-400"
             )} />
-            Connected ({connectedCount})
+            <span>Connected</span>
+            {isLoadingDb ? (
+              <span className="w-4 h-3 rounded-full bg-[var(--field)] animate-pulse inline-block" />
+            ) : (
+              <span>({connectedCount})</span>
+            )}
           </button>
           <button
             type="button"
@@ -366,136 +438,165 @@ export function IntegrationsView({ currentUser }: IntegrationsViewProps) {
         </div>
       </div>
 
-      {/* ─── Integrations Grid ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredIntegrations.map((item) => {
-          const isConnected = item.status === "connected";
-          const isBusy = actionInProgress === item.id;
-
-          return (
-            <div
-              key={item.id}
-              className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 hover:border-[var(--ink-soft)]/30 transition-all group shadow-xs"
+      {/* ─── Integrations Grid / Skeleton Loading State ─── */}
+      {isLoadingDb ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+          {Array.from({ length: 10 }).map((_, idx) => (
+            <IntegrationCardSkeleton key={`skeleton-${idx}`} />
+          ))}
+        </div>
+      ) : filteredIntegrations.length === 0 ? (
+        <div className="py-16 text-center space-y-3 rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-8">
+          <div className="w-12 h-12 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center mx-auto text-[var(--text-faint)]">
+            <Puzzle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="font-[652] text-sm text-[var(--ink)]">No channels found</h3>
+            <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+              No integration platforms match &ldquo;{searchQuery}&rdquo;. Clear your search or change the category filter.
+            </p>
+          </div>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="px-3.5 py-1.5 rounded-full text-xs font-[600] bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all cursor-pointer"
             >
-              <div className="space-y-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  {/* Brand Icon in iOS 30% Squircle */}
-                  <div
-                    className="w-12 h-12 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-2 shrink-0 transition-transform group-hover:scale-105 shadow-xs"
-                    style={{ borderRadius: "30%" }}
-                  >
-                    <SocialIcon
-                      name={item.socialIcon}
-                      size={28}
-                      className="w-7 h-7 object-contain"
-                      alt={item.name}
-                    />
-                  </div>
+              Clear Search
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+          {filteredIntegrations.map((item) => {
+            const isConnected = item.status === "connected";
+            const isBusy = actionInProgress === item.id;
 
-                  {/* Connection Status Badge (Real DB Status) */}
-                  <span
-                    className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[10px] font-[600] border flex items-center gap-1.5 transition-colors",
-                      isConnected
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                        : "bg-[var(--canvas)] text-[var(--text-muted)] border-[var(--hairline)]"
-                    )}
-                  >
+            return (
+              <div
+                key={item.id}
+                className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 hover:border-[var(--ink-soft)]/30 transition-all group shadow-xs"
+              >
+                <div className="space-y-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    {/* Brand Icon in iOS 30% Squircle */}
+                    <div
+                      className="w-12 h-12 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-2 shrink-0 transition-transform group-hover:scale-105 shadow-xs"
+                      style={{ borderRadius: "30%" }}
+                    >
+                      <SocialIcon
+                        name={item.socialIcon}
+                        size={28}
+                        className="w-7 h-7 object-contain"
+                        alt={item.name}
+                      />
+                    </div>
+
+                    {/* Connection Status Badge (Real DB Status) */}
                     <span
                       className={cn(
-                        "w-1.5 h-1.5 rounded-full transition-colors",
-                        isConnected ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+                        "px-2.5 py-0.5 rounded-full text-[10px] font-[600] border flex items-center gap-1.5 transition-colors",
+                        isConnected
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : "bg-[var(--canvas)] text-[var(--text-muted)] border-[var(--hairline)]"
                       )}
-                    />
-                    <span>{isConnected ? "Connected" : "Disconnected"}</span>
-                  </span>
+                    >
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full transition-colors",
+                          isConnected ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+                        )}
+                      />
+                      <span>{isConnected ? "Connected" : "Disconnected"}</span>
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
+                        {item.name}
+                      </h3>
+                      {item.id === "gmail" && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
+                          MCP Enabled
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-[var(--text-muted)] font-[500] block mt-0.5">
+                      {item.category}
+                    </span>
+                    <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed font-[300] min-h-[36px]">
+                      {item.description}
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
-                      {item.name}
-                    </h3>
-                    {item.id === "gmail" && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
-                        MCP Enabled
-                      </span>
+                {/* Status and Statistics Footer */}
+                <div className="pt-3 border-t border-[var(--hairline)] space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                    <span>Last Synced:</span>
+                    <span className="font-[600] text-[var(--ink)]">{item.lastSync}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                    <span>Throughput:</span>
+                    <span className="font-[600] text-[var(--ink)]">{item.messagesProcessed}</span>
+                  </div>
+
+                  {/* Action Buttons: Connect vs Disconnect + Settings */}
+                  <div className="pt-1.5 flex items-center gap-2">
+                    {isConnected ? (
+                      <>
+                        {/* Settings Button: Opens MCP Tools Dialog */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSettings(item.id)}
+                          className="flex-1 py-2 rounded-full text-xs font-[600] transition-all bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] flex items-center justify-center gap-1.5 cursor-pointer shadow-xs focus:outline-none"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-[#0066FF]" />
+                          <span>Settings</span>
+                        </button>
+
+                        {/* Disconnect Button */}
+                        <button
+                          type="button"
+                          onClick={() => toggleConnect(item.id)}
+                          disabled={isBusy}
+                          className="py-2 px-3.5 rounded-full text-xs font-[600] transition-all border border-[var(--hairline)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-rose-500 hover:border-rose-500/30 cursor-pointer focus:outline-none disabled:opacity-50"
+                          title="Disconnect this channel"
+                        >
+                          {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                        </button>
+                      </>
+                    ) : (
+                      /* Connect Button */
+                      <button
+                        type="button"
+                        onClick={() => handleConnectClick(item.id)}
+                        disabled={isBusy}
+                        className="w-full py-2 rounded-full text-xs font-[600] transition-all border border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 shadow-xs focus:outline-none cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isBusy ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Updating...</span>
+                          </>
+                        ) : item.id === "gmail" ? (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" />
+                            <span>Connect via MCP</span>
+                          </>
+                        ) : (
+                          <span>Connect Channel</span>
+                        )}
+                      </button>
                     )}
                   </div>
-                  <span className="text-[11px] text-[var(--text-muted)] font-[500] block mt-0.5">
-                    {item.category}
-                  </span>
-                  <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed font-[300] min-h-[36px]">
-                    {item.description}
-                  </p>
                 </div>
               </div>
-
-              {/* Status and Statistics Footer */}
-              <div className="pt-3 border-t border-[var(--hairline)] space-y-2 text-xs">
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                  <span>Last Synced:</span>
-                  <span className="font-[600] text-[var(--ink)]">{item.lastSync}</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                  <span>Throughput:</span>
-                  <span className="font-[600] text-[var(--ink)]">{item.messagesProcessed}</span>
-                </div>
-
-                {/* Action Buttons: Connect vs Disconnect + Settings */}
-                <div className="pt-1.5 flex items-center gap-2">
-                  {isConnected ? (
-                    <>
-                      {/* Settings Button: Opens MCP Tools Dialog */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenSettings(item.id)}
-                        className="flex-1 py-2 rounded-full text-xs font-[600] transition-all bg-[var(--canvas)] border border-[var(--hairline)] hover:bg-[var(--field)] text-[var(--ink)] flex items-center justify-center gap-1.5 cursor-pointer shadow-xs focus:outline-none"
-                      >
-                        <Settings className="w-3.5 h-3.5 text-[#0066FF]" />
-                        <span>Settings</span>
-                      </button>
-
-                      {/* Disconnect Button */}
-                      <button
-                        type="button"
-                        onClick={() => toggleConnect(item.id)}
-                        disabled={isBusy}
-                        className="py-2 px-3.5 rounded-full text-xs font-[600] transition-all border border-[var(--hairline)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-rose-500 hover:border-rose-500/30 cursor-pointer focus:outline-none disabled:opacity-50"
-                        title="Disconnect this channel"
-                      >
-                        {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Disconnect"}
-                      </button>
-                    </>
-                  ) : (
-                    /* Connect Button */
-                    <button
-                      type="button"
-                      onClick={() => handleConnectClick(item.id)}
-                      disabled={isBusy}
-                      className="w-full py-2 rounded-full text-xs font-[600] transition-all border border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 shadow-xs focus:outline-none cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      {isBusy ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Updating...</span>
-                        </>
-                      ) : item.id === "gmail" ? (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" />
-                          <span>Connect via MCP</span>
-                        </>
-                      ) : (
-                        <span>Connect Channel</span>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ─── Modals ─── */}
       <GmailConnectModal

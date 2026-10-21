@@ -55,7 +55,7 @@ export const MAIN_NAV_OPTIONS: NavOption[] = [
     id: "integrations",
     label: "Integrations",
     icon: Puzzle,
-    badge: "5 Synced",
+    badge: "1 Synced",
     badgeType: "neutral",
     description: "Gmail, Slack, WhatsApp, Outlook",
   },

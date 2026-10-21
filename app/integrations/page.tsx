@@ -18,7 +18,7 @@ export default function IntegrationsPage() {
       <Header />
 
       {/* Main Page Container */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
+      <main className="flex-1 w-full px-4 sm:px-6 md:px-8 2xl:px-12 py-8 sm:py-12 space-y-6">
         {/* Navigation Breadcrumb / Top Bar */}
         <div className="flex items-center justify-between text-xs text-[var(--text-muted)] border-b border-[var(--hairline)] pb-4">
           <div className="flex items-center gap-2">

@@ -31,10 +31,14 @@ export function DashboardShell() {
 
   // User state
   const [currentUser, setCurrentUser] = useState<{
+    id?: string;
     name?: string;
     email?: string;
     avatar_url?: string;
   } | null>(null);
+
+  // Dynamic synced integrations count for sidebar badge
+  const [syncedCount, setSyncedCount] = useState<number | null>(null);
 
   // Load user session from InsForge
   useEffect(() => {
@@ -43,6 +47,7 @@ export function DashboardShell() {
         const { data } = await insforge.auth.getCurrentUser();
         if (data?.user) {
           setCurrentUser({
+            id: data.user.id,
             name: data.user.profile?.name || data.user.email?.split("@")[0],
             email: data.user.email,
             avatar_url: data.user.profile?.avatar_url,
@@ -54,6 +59,32 @@ export function DashboardShell() {
     }
     loadUser();
   }, []);
+
+  // Fetch initial synced integrations count to reflect real database status in sidebar
+  useEffect(() => {
+    let isMounted = true;
+    async function loadIntegrationCount() {
+      try {
+        const headers: Record<string, string> = {};
+        if (currentUser?.id) headers["x-user-id"] = currentUser.id;
+        if (currentUser?.email) headers["x-user-email"] = currentUser.email;
+        const res = await fetch("/api/integrations", { headers, cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.integrations && Array.isArray(data.integrations)) {
+            const count = data.integrations.filter((i: any) => i.status === "connected").length;
+            if (isMounted) setSyncedCount(count);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check synced count:", err);
+      }
+    }
+    loadIntegrationCount();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id, currentUser?.email]);
 
   // Update URL and tab state
   const handleTabChange = (tab: DashboardTab) => {
@@ -74,6 +105,8 @@ export function DashboardShell() {
     router.push("/sign-in");
   };
 
+  const badgeOverrides = syncedCount !== null ? { integrations: `${syncedCount} Synced` } : undefined;
+
   return (
     <div className="flex h-screen w-full bg-[var(--canvas)] text-[var(--ink)] overflow-hidden transition-colors duration-200">
       {/* ─── Desktop Collapsible Sidebar ─── */}
@@ -85,6 +118,7 @@ export function DashboardShell() {
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
           currentUser={currentUser}
           onSignOut={handleSignOut}
+          badgeOverrides={badgeOverrides}
         />
       </div>
 
@@ -108,6 +142,7 @@ export function DashboardShell() {
               currentUser={currentUser}
               onSignOut={handleSignOut}
               className="w-full h-full border-r-0"
+              badgeOverrides={badgeOverrides}
             />
           </div>
         </div>
@@ -124,7 +159,12 @@ export function DashboardShell() {
         />
 
         {/* Scrollable Viewport Content */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 py-6 sm:py-8 max-w-7xl w-full mx-auto pb-24">
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 2xl:px-10 py-6 sm:py-8 w-full pb-24",
+            activeTab === "integrations" ? "max-w-none" : "max-w-7xl mx-auto"
+          )}
+        >
           {activeTab === "dashboard" && (
             <DashboardOverviewView
               onNavigateTab={handleTabChange}
@@ -137,7 +177,10 @@ export function DashboardShell() {
           {activeTab === "briefing" && <BriefingView />}
 
           {activeTab === "integrations" && (
-            <IntegrationsView currentUser={currentUser} />
+            <IntegrationsView
+              currentUser={currentUser}
+              onSyncCountChange={(count) => setSyncedCount(count)}
+            />
           )}
 
           {activeTab === "alerts" && <AlertsView />}

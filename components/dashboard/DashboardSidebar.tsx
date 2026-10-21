@@ -30,6 +30,7 @@ interface DashboardSidebarProps {
   } | null;
   onSignOut?: () => void;
   className?: string;
+  badgeOverrides?: Partial<Record<DashboardTab, string>>;
 }
 
 export function DashboardSidebar({
@@ -40,10 +41,18 @@ export function DashboardSidebar({
   currentUser,
   onSignOut,
   className,
+  badgeOverrides,
 }: DashboardSidebarProps) {
   const userDisplayName =
     currentUser?.name || currentUser?.email?.split("@")[0] || "Executive";
   const userInitial = userDisplayName.charAt(0).toUpperCase();
+
+  const mainNavItems = MAIN_NAV_OPTIONS.map((item) => {
+    if (badgeOverrides && badgeOverrides[item.id] !== undefined) {
+      return { ...item, badge: badgeOverrides[item.id] };
+    }
+    return item;
+  });
 
   return (
     <aside
@@ -130,7 +139,7 @@ export function DashboardSidebar({
           </div>
         )}
 
-        {MAIN_NAV_OPTIONS.map((item) => (
+        {mainNavItems.map((item) => (
           <NavRow
             key={item.id}
             item={item}
