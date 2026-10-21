@@ -93,3 +93,9 @@ desktop.ini
 .roo
 .trae
 .windsurf
+
+# WhatsApp Baileys Sessions
+.baileys_sessions
+.baileys_auth
+baileys_auth_info
+

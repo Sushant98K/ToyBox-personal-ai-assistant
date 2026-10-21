@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
       },
       last_synced_at: now,
       sync_frequency: "Real-time Webhook",
-      messages_processed: `${totalMessages > 0 ? totalMessages : 184} emails synced`,
+      messages_processed: totalMessages > 0 ? `${totalMessages} emails synced` : "Active",
       updated_at: now,
     };
 

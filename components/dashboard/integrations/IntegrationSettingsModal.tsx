@@ -24,8 +24,6 @@ interface IntegrationSettingsModalProps {
   onClose: () => void;
   onDisconnect: (platformId: string) => void;
   accountEmail?: string | null;
-  lastSync?: string;
-  throughput?: string;
 }
 
 export function IntegrationSettingsModal({

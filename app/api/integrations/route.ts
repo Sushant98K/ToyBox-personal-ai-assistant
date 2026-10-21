@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insforgeAdmin } from "@/lib/insforge-admin";
 import { platformsCatalog } from "@/config/integrations";
+import { getWhatsAppStatus } from "@/lib/whatsapp-baileys";
 
 // Helper to determine the target user ID for integrations persistence
 async function resolveUserId(request: NextRequest): Promise<string> {
@@ -82,9 +83,36 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Check live WhatsApp Baileys status in real-time to avoid stale DB reads
+    const liveWhatsApp = await getWhatsAppStatus(userId).catch(() => null);
+
     // Merge catalog with database state
     const result = platformsCatalog.map((platform) => {
       const saved = savedMap.get(platform.id);
+
+      let isConnected = saved ? saved.status === "connected" : false;
+      let accountEmail =
+        saved?.metadata?.account_email ||
+        saved?.metadata?.phone_number ||
+        saved?.credentials?.phone_number ||
+        null;
+      let lastSync = saved?.last_synced_at
+        ? formatTimeAgo(new Date(saved.last_synced_at))
+        : "Never";
+
+      if (platform.id === "whatsapp") {
+        if (liveWhatsApp?.status === "connected") {
+          isConnected = true;
+          accountEmail = liveWhatsApp.phoneNumber || accountEmail || "+91 9768368524";
+          if (lastSync === "Never") {
+            lastSync = "Just now";
+          }
+        } else if (liveWhatsApp?.status === "disconnected") {
+          isConnected = false;
+          accountEmail = null;
+        }
+      }
+
       return {
         id: platform.id,
         name: platform.name,
@@ -92,14 +120,12 @@ export async function GET(request: NextRequest) {
         description: platform.description,
         protocol: platform.protocol,
         socialIcon: platform.socialIcon,
-        status: saved ? saved.status : "disconnected",
-        lastSync: saved?.last_synced_at
-          ? formatTimeAgo(new Date(saved.last_synced_at))
-          : "Never",
+        status: isConnected ? "connected" : "disconnected",
+        lastSync,
         syncFrequency: saved?.sync_frequency || platform.defaultSyncFrequency,
-        messagesProcessed: saved?.messages_processed || (saved?.status === "connected" ? platform.defaultThroughput : "0 items"),
-        accountEmail: saved?.metadata?.account_email || null,
-        hasCustomCredentials: !!(saved?.credentials && Object.keys(saved.credentials).length > 0),
+        messagesProcessed: saved?.messages_processed || (isConnected ? "Active" : "0 items"),
+        accountEmail,
+        hasCustomCredentials: !!(saved?.credentials && Object.keys(saved.credentials).length > 0) || (platform.id === "whatsapp" && isConnected),
         mcpToolsCount: platform.mcpTools.length,
       };
     });
@@ -149,7 +175,7 @@ export async function POST(request: NextRequest) {
       metadata: metadata || (platformId === "gmail" ? { account_email: "sushant98k@gmail.com" } : {}),
       last_synced_at: newStatus === "connected" ? now : null,
       sync_frequency: syncFrequency || platform?.defaultSyncFrequency || "Real-time Webhook",
-      messages_processed: messagesProcessed || (newStatus === "connected" ? platform?.defaultThroughput || "Active sync" : "0 items"),
+      messages_processed: messagesProcessed || (newStatus === "connected" ? "Active" : "0 items"),
       updated_at: now,
     };
 

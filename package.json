@@ -11,12 +11,15 @@
   "dependencies": {
     "@insforge/sdk": "^1.5.2",
     "@radix-ui/react-slot": "^1.5.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^14.3.0",
+    "jimp": "^1.6.1",
     "lucide-react": "^1.59.0",
     "motion": "^14.4.0",
     "next": "16.4.2",
+    "pino": "^10.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.7.0"

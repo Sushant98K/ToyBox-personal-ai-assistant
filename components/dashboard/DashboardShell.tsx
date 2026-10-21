@@ -105,6 +105,10 @@ export function DashboardShell() {
     router.push("/sign-in");
   };
 
+  const handleSyncCountChange = React.useCallback((count: number) => {
+    setSyncedCount((prev) => (prev === count ? prev : count));
+  }, []);
+
   const badgeOverrides = syncedCount !== null ? { integrations: `${syncedCount} Synced` } : undefined;
 
   return (
@@ -179,7 +183,7 @@ export function DashboardShell() {
           {activeTab === "integrations" && (
             <IntegrationsView
               currentUser={currentUser}
-              onSyncCountChange={(count) => setSyncedCount(count)}
+              onSyncCountChange={handleSyncCountChange}
             />
           )}
 

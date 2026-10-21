@@ -18,6 +18,8 @@ import { SocialIcon } from "@/components/icons/AppIcons";
 import { platformsCatalog, getPlatformById } from "@/config/integrations";
 import { IntegrationPlatform } from "@/types";
 import { IntegrationSettingsModal } from "@/components/dashboard/integrations/IntegrationSettingsModal";
+import { WhatsAppConnectionModal } from "@/components/dashboard/integrations/WhatsAppConnectionModal";
+import { WhatsAppSettingsModal } from "@/components/dashboard/integrations/WhatsAppSettingsModal";
 
 export interface IntegrationItem {
   id: string;
@@ -117,16 +119,35 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [isLoadingDb, setIsLoadingDb] = useState(true);
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [oauthStatus, setOauthStatus] = useState<{
     type: "success" | "error";
     message: string;
     email?: string;
   } | null>(null);
 
+  // Floating toast notification state
+  const [toast, setToast] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    email?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   // Modals state
   const [settingsPlatform, setSettingsPlatform] = useState<IntegrationPlatform | null>(null);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [whatsAppConnectionOpen, setWhatsAppConnectionOpen] = useState(false);
+  const [whatsAppSettingsOpen, setWhatsAppSettingsOpen] = useState(false);
 
   // Initialize state with clean disconnected platforms
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(createDefaultIntegrations);
@@ -150,9 +171,20 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
       if (res.ok) {
         const data = await res.json();
         if (data.integrations && Array.isArray(data.integrations)) {
-          setIntegrations(data.integrations);
-          const count = data.integrations.filter((i: any) => i.status === "connected").length;
-          onSyncCountChange?.(count);
+          setIntegrations((prev) => {
+            return data.integrations.map((incoming: IntegrationItem) => {
+              const current = prev.find((p) => p.id === incoming.id);
+              // If user is currently disconnecting this item, keep it disconnected
+              if (disconnectingId === incoming.id) {
+                return { ...incoming, status: "disconnected" };
+              }
+              // Protect newly connected status from being reverted by stale DB response
+              if (connectingId === incoming.id && current?.status === "connected" && incoming.status === "disconnected") {
+                return current;
+              }
+              return incoming;
+            });
+          });
         }
       }
     } catch (err) {
@@ -160,11 +192,26 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     } finally {
       setIsLoadingDb(false);
     }
-  }, [currentUser?.id, currentUser?.email, onSyncCountChange]);
+  }, [currentUser?.id, currentUser?.email, connectingId, disconnectingId]);
 
   useEffect(() => {
     fetchDatabaseIntegrations();
   }, [fetchDatabaseIntegrations]);
+
+  // Re-sync integrations when user returns to browser tab
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchDatabaseIntegrations();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [fetchDatabaseIntegrations]);
+
+  // Synchronize connected platforms count with parent DashboardShell safely in an effect
+  useEffect(() => {
+    const count = integrations.filter((i) => i.status === "connected").length;
+    onSyncCountChange?.(count);
+  }, [integrations, onSyncCountChange]);
 
   // Handle Google OAuth callback redirect notification
   useEffect(() => {
@@ -199,10 +246,15 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     }
   }, [searchParams, fetchDatabaseIntegrations]);
 
-  // Connect click handler - directly opens Google account selection without any intermediate modal
+  // Connect click handler
   const handleConnectClick = async (platformId: string) => {
+    if (platformId === "whatsapp") {
+      setConnectingId("whatsapp");
+      setWhatsAppConnectionOpen(true);
+      return;
+    }
     if (platformId === "gmail") {
-      setActionInProgress("gmail");
+      setConnectingId("gmail");
       try {
         const currentUrl =
           typeof window !== "undefined"
@@ -220,7 +272,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
               data.error ||
               "Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file to connect Gmail.",
           });
-          setActionInProgress(null);
+          setConnectingId(null);
           return;
         }
 
@@ -231,7 +283,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           type: "error",
           message: err.message || "Failed to initiate Google account connection.",
         });
-        setActionInProgress(null);
+        setConnectingId(null);
       }
       return;
     }
@@ -243,32 +295,16 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     const target = integrations.find((i) => i.id === id);
     if (!target) return;
 
-    const nextStatus: "connected" | "disconnected" = target.status === "connected" ? "disconnected" : "connected";
-    setActionInProgress(id);
+    const isDisconnecting = target.status === "connected";
+    const nextStatus: "connected" | "disconnected" = isDisconnecting ? "disconnected" : "connected";
 
-    // Optimistically update UI
-    setIntegrations((prev) => {
-      const next: IntegrationItem[] = prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: nextStatus,
-              lastSync: nextStatus === "connected" ? "Just now" : "Never",
-              messagesProcessed:
-                nextStatus === "connected"
-                  ? item.messagesProcessed !== "0 items"
-                    ? item.messagesProcessed
-                    : "Active"
-                  : "0 items",
-            }
-          : item
-      );
-      const count = next.filter((i) => i.status === "connected").length;
-      onSyncCountChange?.(count);
-      return next;
-    });
+    if (isDisconnecting) {
+      setDisconnectingId(id);
+    } else {
+      setConnectingId(id);
+    }
 
-    // Persist to InsForge database
+    // Persist to backend service & InsForge database
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (currentUser?.id) headers["x-user-id"] = currentUser.id;
@@ -285,6 +321,14 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
             },
           }),
         });
+      } else if (id === "whatsapp") {
+        await fetch("/api/integrations/whatsapp/pair", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            action: nextStatus === "connected" ? "verify" : "disconnect",
+          }),
+        });
       } else {
         await fetch("/api/integrations", {
           method: "POST",
@@ -295,16 +339,35 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           }),
         });
       }
+
+      // Update local state after action completes successfully
+      setIntegrations((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: nextStatus,
+                lastSync: nextStatus === "connected" ? "Just now" : item.lastSync,
+                messagesProcessed: nextStatus === "connected" ? "Active" : "0 items",
+                accountEmail: nextStatus === "connected" ? item.accountEmail : null,
+              }
+            : item
+        )
+      );
     } catch (err) {
       console.error("Failed to persist integration change to InsForge:", err);
-      // Revert on error
-      fetchDatabaseIntegrations();
     } finally {
-      setActionInProgress(null);
+      setConnectingId(null);
+      setDisconnectingId(null);
+      fetchDatabaseIntegrations();
     }
   };
 
   const handleOpenSettings = (platformId: string) => {
+    if (platformId === "whatsapp") {
+      setWhatsAppSettingsOpen(true);
+      return;
+    }
     const platformDef = getPlatformById(platformId);
     if (platformDef) {
       setSettingsPlatform(platformDef);
@@ -312,26 +375,61 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     }
   };
 
+  const handleWhatsAppConnected = (data: { phoneNumber: string }) => {
+    const cleanNum = data.phoneNumber.trim();
+    setConnectingId(null);
+    setDisconnectingId(null);
+    setIntegrations((prev) =>
+      prev.map((item) =>
+        item.id === "whatsapp"
+          ? {
+              ...item,
+              status: "connected" as const,
+              lastSync: "Just now",
+              messagesProcessed: "Active",
+              accountEmail: cleanNum,
+            }
+          : item
+      )
+    );
+
+    // Trigger toast notification
+    setToast({
+      id: `toast-${Date.now()}`,
+      title: "WhatsApp Connected",
+      message: "WhatsApp connected successfully via Baileys Multi-Device protocol!",
+      email: cleanNum,
+    });
+
+    setOauthStatus({
+      type: "success",
+      message: "WhatsApp connected successfully via Baileys Multi-Device protocol!",
+      email: cleanNum,
+    });
+
+    // Refresh database integration status in staggered intervals to ensure backend writes settle smoothly
+    fetchDatabaseIntegrations();
+    setTimeout(() => fetchDatabaseIntegrations(), 1200);
+    setTimeout(() => fetchDatabaseIntegrations(), 3000);
+  };
+
   const handleGmailConnected = (savedData: any) => {
-    setIntegrations((prev) => {
-      const next: IntegrationItem[] = prev.map((item) =>
+    setIntegrations((prev) =>
+      prev.map((item) =>
         item.id === "gmail"
           ? {
               ...item,
               status: "connected" as const,
               lastSync: "Just now",
-              messagesProcessed: "184 emails today",
+              messagesProcessed: "Active",
               accountEmail:
                 savedData?.metadata?.account_email ||
                 currentUser?.email ||
                 "sushant98k@gmail.com",
             }
           : item
-      );
-      const count = next.filter((i) => i.status === "connected").length;
-      onSyncCountChange?.(count);
-      return next;
-    });
+      )
+    );
     // Refresh database state
     fetchDatabaseIntegrations();
   };
@@ -376,6 +474,34 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-200">
+      {/* ─── Floating Toast Notification ─── */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-full bg-[var(--canvas-soft)] border border-[var(--hairline)] shadow-xl backdrop-blur-md animate-in slide-in-from-top-4 fade-in duration-200"
+        >
+          <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <div className="text-xs">
+            <p className="font-[600] text-[var(--ink)] leading-snug">
+              {toast.title}
+            </p>
+            <p className="text-[var(--text-muted)] font-[300]">
+              {toast.message} {toast.email && <span className="font-mono text-[var(--ink)] font-[500]">({toast.email})</span>}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="p-1 rounded-full text-[var(--text-faint)] hover:text-[var(--ink)] hover:bg-[var(--field)] transition-colors cursor-pointer ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* ─── OAuth Status Banner ─── */}
       {oauthStatus && (
         <div
@@ -455,10 +581,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           <button
             type="button"
             onClick={() => handleConnectClick("gmail")}
-            disabled={isSyncingAll || isLoadingDb || actionInProgress === "gmail"}
+            disabled={isSyncingAll || isLoadingDb || connectingId === "gmail"}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none cursor-pointer disabled:opacity-50"
           >
-            {actionInProgress === "gmail" ? (
+            {connectingId === "gmail" ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 <span>Connecting...</span>
@@ -583,7 +709,8 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
           {filteredIntegrations.map((item) => {
             const isConnected = item.status === "connected";
-            const isBusy = actionInProgress === item.id;
+            const isConnecting = connectingId === item.id;
+            const isDisconnecting = disconnectingId === item.id;
 
             return (
               <div
@@ -611,16 +738,28 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                         "px-2.5 py-0.5 rounded-full text-[10px] font-[600] border flex items-center gap-1.5 transition-colors",
                         isConnected
                           ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : isConnecting
+                          ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
                           : "bg-[var(--canvas)] text-[var(--text-muted)] border-[var(--hairline)]"
                       )}
                     >
                       <span
                         className={cn(
                           "w-1.5 h-1.5 rounded-full transition-colors",
-                          isConnected ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+                          isConnected
+                            ? "bg-emerald-500 animate-pulse"
+                            : isConnecting
+                            ? "bg-amber-500 animate-ping"
+                            : "bg-gray-400"
                         )}
                       />
-                      <span>{isConnected ? "Connected" : "Disconnected"}</span>
+                      <span>
+                        {isConnected
+                          ? "Connected"
+                          : isConnecting
+                          ? "Syncing..."
+                          : "Disconnected"}
+                      </span>
                     </span>
                   </div>
 
@@ -629,7 +768,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                       <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
                         {item.name}
                       </h3>
-                      {item.id === "gmail" && (
+                      {(item.id === "gmail" || item.id === "whatsapp") && (
                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
                           MCP Enabled
                         </span>
@@ -650,10 +789,6 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                     <span>Last Synced:</span>
                     <span className="font-[600] text-[var(--ink)]">{item.lastSync}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                    <span>Throughput:</span>
-                    <span className="font-[600] text-[var(--ink)]">{item.messagesProcessed}</span>
-                  </div>
 
                   {/* Action Buttons: Connect vs Disconnect + Settings */}
                   <div className="pt-1.5 flex items-center gap-2">
@@ -673,11 +808,18 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                         <button
                           type="button"
                           onClick={() => toggleConnect(item.id)}
-                          disabled={isBusy}
+                          disabled={isDisconnecting}
                           className="py-2 px-3.5 rounded-full text-xs font-[600] transition-all border border-[var(--hairline)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-rose-500 hover:border-rose-500/30 cursor-pointer focus:outline-none disabled:opacity-50"
                           title="Disconnect this channel"
                         >
-                          {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                          {isDisconnecting ? (
+                            <span className="flex items-center gap-1 text-rose-500">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Disconnecting...</span>
+                            </span>
+                          ) : (
+                            "Disconnect"
+                          )}
                         </button>
                       </>
                     ) : (
@@ -685,10 +827,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                       <button
                         type="button"
                         onClick={() => handleConnectClick(item.id)}
-                        disabled={isBusy}
+                        disabled={isConnecting}
                         className="w-full py-2 rounded-full text-xs font-[600] transition-all border border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 shadow-xs focus:outline-none cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
                       >
-                        {isBusy ? (
+                        {isConnecting ? (
                           <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                             <span>Connecting...</span>
@@ -717,8 +859,36 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
             ? integrations.find((i) => i.id === "gmail")?.accountEmail || currentUser?.email || "sushant98k@gmail.com"
             : null
         }
-        lastSync={integrations.find((i) => i.id === settingsPlatform?.id)?.lastSync}
-        throughput={integrations.find((i) => i.id === settingsPlatform?.id)?.messagesProcessed}
+      />
+
+      {/* ─── Dedicated WhatsApp Modals ─── */}
+      <WhatsAppConnectionModal
+        isOpen={whatsAppConnectionOpen}
+        onClose={() => {
+          setWhatsAppConnectionOpen(false);
+          setConnectingId((prev) => (prev === "whatsapp" ? null : prev));
+        }}
+        onSuccess={handleWhatsAppConnected}
+        onOpenSettings={() => setWhatsAppSettingsOpen(true)}
+        initialPhoneNumber={
+          integrations.find((i) => i.id === "whatsapp")?.accountEmail || "+91 9768368524"
+        }
+        currentUser={currentUser}
+      />
+
+      <WhatsAppSettingsModal
+        isOpen={whatsAppSettingsOpen}
+        onClose={() => setWhatsAppSettingsOpen(false)}
+        onDisconnect={() => toggleConnect("whatsapp")}
+        onReconnect={() => {
+          setWhatsAppSettingsOpen(false);
+          setConnectingId("whatsapp");
+          setWhatsAppConnectionOpen(true);
+        }}
+        phoneNumber={
+          integrations.find((i) => i.id === "whatsapp")?.accountEmail || "+91 9768368524"
+        }
+        tools={getPlatformById("whatsapp")?.mcpTools || []}
       />
     </div>
   );
