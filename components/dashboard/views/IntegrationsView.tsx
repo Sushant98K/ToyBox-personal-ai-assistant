@@ -20,6 +20,7 @@ import { IntegrationPlatform } from "@/types";
 import { IntegrationSettingsModal } from "@/components/dashboard/integrations/IntegrationSettingsModal";
 import { WhatsAppConnectionModal } from "@/components/dashboard/integrations/WhatsAppConnectionModal";
 import { WhatsAppSettingsModal } from "@/components/dashboard/integrations/WhatsAppSettingsModal";
+import { GoogleCalendarSettingsModal } from "@/components/dashboard/integrations/GoogleCalendarSettingsModal";
 
 export interface IntegrationItem {
   id: string;
@@ -33,6 +34,13 @@ export interface IntegrationItem {
   socialIcon: string;
   protocol?: string;
   accountEmail?: string | null;
+  timezone?: string;
+  permissions?: {
+    read_access: boolean;
+    event_creation: boolean;
+    auto_scheduling: boolean;
+  };
+  metadata?: any;
   hasCustomCredentials?: boolean;
 }
 
@@ -148,6 +156,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [whatsAppConnectionOpen, setWhatsAppConnectionOpen] = useState(false);
   const [whatsAppSettingsOpen, setWhatsAppSettingsOpen] = useState(false);
+  const [googleCalendarSettingsOpen, setGoogleCalendarSettingsOpen] = useState(false);
 
   // Initialize state with clean disconnected platforms
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(createDefaultIntegrations);
@@ -233,6 +242,25 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         newUrl.searchParams.delete("email");
         window.history.replaceState({}, "", newUrl.toString());
       }
+    } else if (connectedParam === "gcal" || connectedParam === "calendar") {
+      setOauthStatus({
+        type: "success",
+        message: "Google Calendar & Meet successfully connected via MCP!",
+        email: emailParam || undefined,
+      });
+      setToast({
+        id: `toast-${Date.now()}`,
+        title: "Google Calendar Connected",
+        message: "Google Calendar & Meet successfully connected via MCP!",
+        email: emailParam || undefined,
+      });
+      fetchDatabaseIntegrations();
+      if (typeof window !== "undefined") {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("connected");
+        newUrl.searchParams.delete("email");
+        window.history.replaceState({}, "", newUrl.toString());
+      }
     } else if (errorParam) {
       setOauthStatus({
         type: "error",
@@ -287,6 +315,40 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
       }
       return;
     }
+    if (platformId === "gcal") {
+      setConnectingId("gcal");
+      try {
+        const currentUrl =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/dashboard?tab=integrations";
+        const res = await fetch(
+          `/api/auth/calendar?format=json&userId=${encodeURIComponent(currentUser?.id || "")}&returnUrl=${encodeURIComponent(currentUrl)}`
+        );
+        const data = await res.json();
+
+        if (!res.ok || !data.configured || !data.url) {
+          setOauthStatus({
+            type: "error",
+            message:
+              data.error ||
+              "Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your .env file to connect Google Calendar.",
+          });
+          setConnectingId(null);
+          return;
+        }
+
+        // Navigate immediately to Google's OAuth consent screen
+        window.location.href = data.url;
+      } catch (err: any) {
+        setOauthStatus({
+          type: "error",
+          message: err.message || "Failed to initiate Google Calendar connection.",
+        });
+        setConnectingId(null);
+      }
+      return;
+    }
     toggleConnect(platformId);
   };
 
@@ -321,6 +383,25 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
             },
           }),
         });
+      } else if (id === "gcal") {
+        if (nextStatus === "disconnected") {
+          await fetch("/api/integrations/calendar/mcp", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              action: "disconnect",
+            }),
+          });
+        } else {
+          await fetch("/api/integrations", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              platformId: "gcal",
+              status: "connected",
+            }),
+          });
+        }
       } else if (id === "whatsapp") {
         await fetch("/api/integrations/whatsapp/pair", {
           method: "POST",
@@ -366,6 +447,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
   const handleOpenSettings = (platformId: string) => {
     if (platformId === "whatsapp") {
       setWhatsAppSettingsOpen(true);
+      return;
+    }
+    if (platformId === "gcal") {
+      setGoogleCalendarSettingsOpen(true);
       return;
     }
     const platformDef = getPlatformById(platformId);
@@ -768,7 +853,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                       <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
                         {item.name}
                       </h3>
-                      {(item.id === "gmail" || item.id === "whatsapp") && (
+                      {(item.id === "gmail" || item.id === "whatsapp" || item.id === "gcal") && (
                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
                           MCP Enabled
                         </span>
@@ -889,6 +974,22 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           integrations.find((i) => i.id === "whatsapp")?.accountEmail || "+91 9768368524"
         }
         tools={getPlatformById("whatsapp")?.mcpTools || []}
+      />
+
+      {/* ─── Dedicated Google Calendar Settings & MCP Dialog ─── */}
+      <GoogleCalendarSettingsModal
+        isOpen={googleCalendarSettingsOpen}
+        onClose={() => setGoogleCalendarSettingsOpen(false)}
+        onDisconnect={() => toggleConnect("gcal")}
+        accountEmail={
+          integrations.find((i) => i.id === "gcal")?.accountEmail ||
+          currentUser?.email ||
+          "sushant98k@gmail.com"
+        }
+        timezone={integrations.find((i) => i.id === "gcal")?.timezone || "Asia/Kolkata"}
+        lastSync={integrations.find((i) => i.id === "gcal")?.lastSync || "Just now"}
+        tools={getPlatformById("gcal")?.mcpTools || []}
+        initialPermissions={integrations.find((i) => i.id === "gcal")?.permissions}
       />
     </div>
   );

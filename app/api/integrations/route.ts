@@ -91,12 +91,13 @@ export async function GET(request: NextRequest) {
       const saved = savedMap.get(platform.id);
 
       let isConnected = saved ? saved.status === "connected" : false;
-      let accountEmail =
-        saved?.metadata?.account_email ||
-        saved?.metadata?.phone_number ||
-        saved?.credentials?.phone_number ||
-        null;
-      let lastSync = saved?.last_synced_at
+      let accountEmail = isConnected
+        ? saved?.metadata?.account_email ||
+          saved?.metadata?.phone_number ||
+          saved?.credentials?.phone_number ||
+          null
+        : null;
+      let lastSync = isConnected && saved?.last_synced_at
         ? formatTimeAgo(new Date(saved.last_synced_at))
         : "Never";
 
@@ -125,6 +126,13 @@ export async function GET(request: NextRequest) {
         syncFrequency: saved?.sync_frequency || platform.defaultSyncFrequency,
         messagesProcessed: saved?.messages_processed || (isConnected ? "Active" : "0 items"),
         accountEmail,
+        timezone: saved?.metadata?.timezone || "Asia/Kolkata",
+        permissions: saved?.metadata?.permissions || {
+          read_access: true,
+          event_creation: true,
+          auto_scheduling: true,
+        },
+        metadata: saved?.metadata || null,
         hasCustomCredentials: !!(saved?.credentials && Object.keys(saved.credentials).length > 0) || (platform.id === "whatsapp" && isConnected),
         mcpToolsCount: platform.mcpTools.length,
       };
@@ -165,14 +173,16 @@ export async function POST(request: NextRequest) {
     const newStatus = status === "connected" ? "connected" : "disconnected";
     const now = new Date().toISOString();
 
+    const isMcpOAuth = platformId === "gmail" || platformId === "gcal";
+
     const payload = {
       user_id: userId,
       platform_id: platformId,
       platform_name: platformName,
       status: newStatus,
-      auth_type: platformId === "gmail" ? "mcp_oauth" : "api_key",
-      credentials: credentials || {},
-      metadata: metadata || (platformId === "gmail" ? { account_email: "sushant98k@gmail.com" } : {}),
+      auth_type: isMcpOAuth ? "mcp_oauth" : "api_key",
+      credentials: newStatus === "connected" ? (credentials || {}) : {},
+      metadata: metadata || (platformId === "gmail" ? { account_email: "sushant98k@gmail.com" } : platformId === "gcal" ? { account_email: "sushant98k@gmail.com", timezone: "Asia/Kolkata", permissions: { read_access: true, event_creation: true, auto_scheduling: true } } : {}),
       last_synced_at: newStatus === "connected" ? now : null,
       sync_frequency: syncFrequency || platform?.defaultSyncFrequency || "Real-time Webhook",
       messages_processed: messagesProcessed || (newStatus === "connected" ? "Active" : "0 items"),
