@@ -15,7 +15,7 @@ export function IntegrationMarquee() {
   ];
 
   return (
-    <section id="integrations" className="py-16 md:py-24 border-y border-[var(--hairline-soft)] bg-[var(--canvas)] overflow-hidden transition-colors duration-200">
+    <section id="integrations" className="py-16 md:py-24 border-y border-[var(--hairline-soft)] bg-transparent overflow-hidden transition-colors duration-200">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-12 text-center">
         <h2 className="text-3xl sm:text-4xl md:text-[44px] font-[650] text-[var(--ink)] leading-[1.13] tracking-tight">
           Connect every inbox and messenger in 60 seconds.

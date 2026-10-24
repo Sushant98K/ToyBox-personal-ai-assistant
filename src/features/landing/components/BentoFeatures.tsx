@@ -20,7 +20,7 @@ export function BentoFeatures() {
   const [filterActive, setFilterActive] = useState(false);
 
   return (
-    <section id="features" className="py-20 md:py-32 px-4 sm:px-6 bg-[var(--canvas)] transition-colors duration-200">
+    <section id="features" className="py-20 md:py-32 px-4 sm:px-6 bg-transparent transition-colors duration-200">
       <div className="max-w-6xl mx-auto">
         {/* Section Header with terminal period and 652/300 weight pairing */}
         <div className="text-center max-w-3xl mx-auto mb-16">

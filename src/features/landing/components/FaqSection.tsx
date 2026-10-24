@@ -12,7 +12,7 @@ export function FaqSection() {
   };
 
   return (
-    <section id="faq" className="py-20 md:py-28 px-4 sm:px-6 bg-[var(--canvas)] border-t border-[var(--hairline-soft)] transition-colors duration-200">
+    <section id="faq" className="py-20 md:py-28 px-4 sm:px-6 bg-transparent border-t border-[var(--hairline-soft)] transition-colors duration-200">
       <div className="max-w-3xl mx-auto">
         <div className="text-center mb-14">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--canvas-soft)] text-xs font-[600] text-[var(--ink)] mb-4 border border-[var(--hairline)]">

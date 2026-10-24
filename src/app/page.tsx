@@ -14,6 +14,7 @@ import {
 } from "@/features/landing";
 import { AgentWaveLoader } from "@/components/feedback/agent-wave-loader";
 import { motion, AnimatePresence } from "framer-motion";
+import { KineticGrid } from "@/components/ui/kinetic-grid";
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] selection:bg-[var(--ink)] selection:text-[var(--canvas)] flex flex-col justify-between transition-colors duration-200">
+      <KineticGrid className="min-h-screen text-[var(--ink)] selection:bg-[var(--ink)] selection:text-[var(--canvas)] flex flex-col justify-between">
         {/* Floating Centered Nav Pill */}
         <Header />
 
@@ -74,7 +75,7 @@ export default function Home() {
 
         {/* Full-bleed Polarity Inversion Footer with rounded top corners */}
         <Footer />
-      </div>
+      </KineticGrid>
     </>
   );
 }

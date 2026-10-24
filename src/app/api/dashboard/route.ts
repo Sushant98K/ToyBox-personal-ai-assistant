@@ -199,7 +199,7 @@ RULES FOR SYNTHESIS:
    - "priority_count": number of priority tasks / upcoming calendar items
    - "followup_count": number of follow-ups
    - "brief_bullets": exactly 3 or 4 high-impact, factually accurate bullet points
-   - "priority_items": top 3 or 4 items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
+   - "priority_items": array of 6 to 8 prioritized action items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
 
 Respond ONLY with valid JSON conforming to the schema without markdown blocks.`;
 
@@ -222,7 +222,7 @@ Respond ONLY with valid JSON conforming to the schema without markdown blocks.`;
             ? parsed.brief_bullets.slice(0, 4)
             : buildDynamicRealBullets(liveContext),
           priority_items: Array.isArray(parsed.priority_items) && parsed.priority_items.length > 0
-            ? parsed.priority_items.slice(0, 4).map((item: Record<string, unknown>, idx: number) => ({
+            ? parsed.priority_items.slice(0, 10).map((item: Record<string, unknown>, idx: number) => ({
                 id: (item.id as string) || `pri_${idx + 1}`,
                 platform: ["gmail", "slack", "whatsapp", "calendar"].includes(item.platform as string)
                   ? (item.platform as "gmail" | "slack" | "whatsapp" | "calendar")
@@ -559,18 +559,35 @@ function buildDynamicRealPriorityItems(context: Awaited<ReturnType<typeof fetchI
     });
   }
 
-  if (context.calendar.events.length > 0) {
-    const evt = context.calendar.events[0];
-    items.push({
-      id: "pri_calendar_event",
-      platform: "calendar",
-      title: `Upcoming: ${evt.summary}`,
-      context: `Scheduled on ${evt.start} synced from primary Google Calendar.`,
-      time: evt.start,
-      priority: "high",
+  // Live messages from Gmail
+  if (context.emails.messages && context.emails.messages.length > 0) {
+    context.emails.messages.forEach((msg, idx) => {
+      items.push({
+        id: `pri_gmail_${idx + 1}`,
+        platform: "gmail",
+        title: msg.subject || "Unread Email Action Required",
+        context: `From: ${msg.from}. ${msg.snippet ? msg.snippet.slice(0, 110) : "Awaiting executive reply."}`,
+        time: msg.date ? formatTimeAgo(new Date(msg.date)) : "Recent",
+        priority: idx === 0 ? "urgent" : "high",
+      });
     });
   }
 
+  // Google Calendar events
+  if (context.calendar.events.length > 0) {
+    context.calendar.events.forEach((evt, idx) => {
+      items.push({
+        id: `pri_calendar_event_${idx + 1}`,
+        platform: "calendar",
+        title: `Upcoming: ${evt.summary}`,
+        context: `Scheduled on ${evt.start} synced from primary Google Calendar.${evt.attendees ? ` Attendees: ${evt.attendees}` : ""}`,
+        time: evt.start,
+        priority: idx === 0 ? "high" : "medium",
+      });
+    });
+  }
+
+  // Slack channel invite
   items.push({
     id: "pri_slack_invite",
     platform: "slack",
@@ -580,11 +597,12 @@ function buildDynamicRealPriorityItems(context: Awaited<ReturnType<typeof fetchI
     priority: "medium",
   });
 
+  // WhatsApp telemetry
   items.push({
     id: "pri_whatsapp_live",
     platform: "whatsapp",
     title: "WhatsApp Bridge Active",
-    context: `Baileys multi-device connected for ${context.whatsapp.phoneNumber}. 0 pending alerts.`,
+    context: `Baileys multi-device connected for ${context.whatsapp.phoneNumber}. 0 pending critical alerts.`,
     time: "Live",
     priority: "medium",
   });

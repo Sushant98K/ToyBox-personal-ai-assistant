@@ -25,9 +25,10 @@ export function ThemeToggle({ className = "", variant = "floating" }: ThemeToggl
       <button
         onClick={toggleTheme}
         type="button"
+        id="theme-switcher-btn"
         aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
         title={`Switch to ${isDark ? "light" : "dark"} mode`}
-        className={`inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--hairline)] bg-[var(--canvas-soft)] hover:bg-[var(--raised)] text-[var(--ink)] transition-all duration-200 active:scale-95 cursor-pointer ${className}`}
+        className={`relative p-2 rounded-full border border-[var(--hairline)] text-[var(--ink)] hover:bg-[var(--canvas-soft)] transition-all duration-150 active:scale-95 cursor-pointer focus:outline-none ${className}`}
       >
         <div className="relative w-4 h-4 flex items-center justify-center">
           {isDark ? (

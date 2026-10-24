@@ -25,7 +25,7 @@ export function CtaSection() {
   };
 
   return (
-    <section id="signup" className="py-16 md:py-24 px-4 sm:px-6 bg-[var(--canvas)] transition-colors duration-200">
+    <section id="signup" className="py-16 md:py-24 px-4 sm:px-6 bg-transparent transition-colors duration-200">
       <div className="max-w-4xl mx-auto bg-[var(--canvas-soft)] border border-[var(--hairline)] rounded-[24px] p-8 sm:p-14 text-center">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--canvas)] border border-[var(--hairline-soft)] text-xs font-[600] text-[var(--ink)] mb-6">
           <Sparkles className="w-3.5 h-3.5" />

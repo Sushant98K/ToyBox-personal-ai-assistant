@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { siteConfig } from "@/config";
 import { ThemeProvider } from "@/providers";
-import { ThemeToggle } from "@/components/theme";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -45,8 +44,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-[var(--canvas)] text-[var(--ink)] font-sans selection:bg-[var(--ink)] selection:text-[var(--canvas)] transition-colors duration-200 relative">
         <ThemeProvider>
           {children}
-          {/* Always-visible floating theme toggle pinned to right bottom side */}
-          <ThemeToggle variant="floating" />
         </ThemeProvider>
       </body>
     </html>

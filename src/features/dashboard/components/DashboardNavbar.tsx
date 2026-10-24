@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { DashboardTab, MAIN_NAV_OPTIONS, PRICING_NAV_OPTION } from "../types";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme";
 
 interface DashboardNavbarProps {
   activeTab: DashboardTab;
@@ -132,6 +133,9 @@ export function DashboardNavbar({
               {isSyncing ? "Syncing..." : "Sync All"}
             </span>
           </button>
+
+          {/* Theme Switcher (Left of Notification Bell) */}
+          <ThemeToggle variant="inline" />
 
           {/* Notifications Dropdown Button */}
           <div className="relative">

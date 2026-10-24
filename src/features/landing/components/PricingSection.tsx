@@ -9,7 +9,7 @@ export function PricingSection() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("annual");
 
   return (
-    <section id="pricing" className="py-20 md:py-32 px-4 sm:px-6 bg-[var(--canvas)] transition-colors duration-200">
+    <section id="pricing" className="py-20 md:py-32 px-4 sm:px-6 bg-transparent transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
         {/* Section Header */}
         <div className="text-center max-w-2xl mx-auto mb-12">

@@ -77,6 +77,7 @@ export function DashboardOverviewView({
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [showExtended, setShowExtended] = useState<boolean>(false);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "urgent" | "high" | "medium">("all");
 
   const currentUserId = currentUser?.id;
   const currentUserEmail = currentUser?.email;
@@ -606,135 +607,236 @@ export function DashboardOverviewView({
         </div>
 
         {/* Right Column: Priority Items Card */}
-        <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 sm:p-7 space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline-soft)]">
-            <div className="flex items-center gap-2.5">
-              <div
-                className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shrink-0"
-                style={{ borderRadius: "30%" }}
-              >
-                <ShieldAlert className="w-4 h-4 stroke-[1.8]" />
-              </div>
-              <div>
-                <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
-                  Priority Items.
-                </h3>
-                <p className="text-xs font-[300] text-[var(--text-muted)]">
-                  Immediate actions extracted across connected apps
-                </p>
-              </div>
-            </div>
+        {(() => {
+          const PRIORITY_ORDER: Record<string, number> = {
+            urgent: 1,
+            high: 2,
+            medium: 3,
+          };
 
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)]">
-              {data?.priority_items?.length || 4} Pending
-            </span>
-          </div>
+          const rawItems = data?.priority_items || [];
+          
+          // Sort with highest priority first (urgent -> high -> medium)
+          const sortedItems = [...rawItems].sort((a, b) => {
+            const rankA = PRIORITY_ORDER[a.priority] ?? 99;
+            const rankB = PRIORITY_ORDER[b.priority] ?? 99;
+            return rankA - rankB;
+          });
 
-          {/* List of 3 to 4 Urgent Items */}
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3 py-2">
-                {[1, 2, 3, 4].map((i) => (
+          // Filter according to priority filter
+          const filteredItems = sortedItems.filter((item) => {
+            if (priorityFilter === "all") return true;
+            return item.priority === priorityFilter;
+          });
+
+          // Only show top 4 on dashboard, not more than that
+          const displayedItems = filteredItems.slice(0, 4);
+
+          const counts = {
+            all: sortedItems.length,
+            urgent: sortedItems.filter((i) => i.priority === "urgent").length,
+            high: sortedItems.filter((i) => i.priority === "high").length,
+            medium: sortedItems.filter((i) => i.priority === "medium").length,
+          };
+
+          return (
+            <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 sm:p-7 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--hairline-soft)]">
+                <div className="flex items-center gap-2.5">
                   <div
-                    key={i}
-                    className="h-20 bg-[var(--canvas)] rounded-[16px] animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : (
-              (data?.priority_items || []).map((item) => {
-                const isResolved = resolvedIds.has(item.id);
-
-                const priorityBadge = {
-                  urgent: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-                  high: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-                  medium: "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]",
-                }[item.priority] || "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]";
-
-                return (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      "p-4 rounded-[16px] bg-[var(--canvas)] border transition-all space-y-2.5 group",
-                      isResolved
-                        ? "border-[var(--hairline-soft)] opacity-60"
-                        : "border-[var(--hairline-soft)] hover:border-[var(--hairline)]"
-                    )}
+                    className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shrink-0"
+                    style={{ borderRadius: "30%" }}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div
-                          className="w-7 h-7 bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1 mt-0.5"
-                          style={{ borderRadius: "30%" }}
-                        >
-                          <SocialIcon
-                            name={item.platform}
-                            size={14}
-                            className="w-3.5 h-3.5 object-contain"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <h4
-                            className={cn(
-                              "text-xs sm:text-sm font-[652] truncate",
-                              isResolved ? "line-through text-[var(--text-faint)]" : "text-[var(--ink)]"
-                            )}
-                          >
-                            {item.title}
-                          </h4>
-                          <p className="text-xs font-[456] text-[var(--text-muted)] line-clamp-2 mt-0.5 leading-relaxed">
-                            {item.context}
-                          </p>
-                        </div>
-                      </div>
+                    <ShieldAlert className="w-4 h-4 stroke-[1.8]" />
+                  </div>
+                  <div>
+                    <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
+                      Priority Items.
+                    </h3>
+                    <p className="text-xs font-[300] text-[var(--text-muted)]">
+                      Immediate actions extracted across connected apps
+                    </p>
+                  </div>
+                </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)] self-start sm:self-auto">
+                  {rawItems.filter((i) => !resolvedIds.has(i.id)).length} Pending
+                </span>
+              </div>
+
+              {/* Priority Filter Segmented Control Tabs */}
+              <div className="flex items-center gap-1.5 p-1 rounded-full bg-[var(--canvas)] border border-[var(--hairline-soft)] overflow-x-auto scrollbar-none">
+                {[
+                  { id: "all", label: "All", count: counts.all },
+                  { id: "urgent", label: "Urgent", count: counts.urgent, dot: "bg-rose-500" },
+                  { id: "high", label: "High", count: counts.high, dot: "bg-amber-500" },
+                  { id: "medium", label: "Medium", count: counts.medium, dot: "bg-[var(--text-muted)]" },
+                ].map((tab) => {
+                  const active = priorityFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPriorityFilter(tab.id as "all" | "urgent" | "high" | "medium")}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-[600] transition-all cursor-pointer whitespace-nowrap",
+                        active
+                          ? "bg-[var(--canvas-soft)] text-[var(--ink)] border border-[var(--hairline)] shadow-2xs"
+                          : "text-[var(--text-muted)] hover:text-[var(--ink)] border border-transparent"
+                      )}
+                    >
+                      {tab.dot && <span className={cn("w-1.5 h-1.5 rounded-full", tab.dot)} />}
+                      <span>{tab.label}</span>
+                      {tab.count > 0 && (
                         <span
                           className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-[600] uppercase tracking-wider border",
-                            priorityBadge
+                            "text-[10px] px-1.5 py-0.2 rounded-full",
+                            active
+                              ? "bg-[var(--canvas)] text-[var(--ink)]"
+                              : "text-[var(--text-faint)]"
                           )}
                         >
-                          {item.priority}
+                          {tab.count}
                         </span>
-                      </div>
-                    </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
 
-                    <div className="flex items-center justify-between pt-2 text-xs border-t border-[var(--hairline-soft)]">
-                      <span className="text-[var(--text-faint)] font-mono flex items-center gap-1 text-[11px]">
-                        <Clock className="w-3 h-3" />
-                        {item.time}
-                      </span>
+              {/* List of Top 4 Priority Items */}
+              <div className="space-y-3">
+                {loading ? (
+                  <div className="space-y-3 py-2">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className="h-20 bg-[var(--canvas)] rounded-[16px] animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : displayedItems.length === 0 ? (
+                  <div className="py-8 text-center space-y-1.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)]">
+                    <p className="text-xs font-[652] text-[var(--ink)]">
+                      No {priorityFilter !== "all" ? `${priorityFilter} priority` : "pending"} items
+                    </p>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      All action items in this filter category have been cleared.
+                    </p>
+                  </div>
+                ) : (
+                  displayedItems.map((item) => {
+                    const isResolved = resolvedIds.has(item.id);
 
-                      <button
-                        type="button"
-                        onClick={(e) => toggleResolve(item.id, e)}
+                    const priorityBadge = {
+                      urgent: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+                      high: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                      medium: "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]",
+                    }[item.priority] || "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]";
+
+                    return (
+                      <div
+                        key={item.id}
                         className={cn(
-                          "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-[600] transition-all cursor-pointer",
+                          "p-4 rounded-[16px] bg-[var(--canvas)] border transition-all space-y-2.5 group",
                           isResolved
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                            : "bg-[var(--canvas-soft)] hover:bg-[var(--field)] text-[var(--ink)] border border-[var(--hairline)]"
+                            ? "border-[var(--hairline-soft)] opacity-60"
+                            : "border-[var(--hairline-soft)] hover:border-[var(--hairline)]"
                         )}
                       >
-                        {isResolved ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-500" />
-                            <span>Resolved</span>
-                          </>
-                        ) : (
-                          <>
-                            <Circle className="w-3 h-3 text-[var(--text-muted)]" />
-                            <span>Mark Resolved</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div
+                              className="w-7 h-7 bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1 mt-0.5"
+                              style={{ borderRadius: "30%" }}
+                            >
+                              <SocialIcon
+                                name={item.platform}
+                                size={14}
+                                className="w-3.5 h-3.5 object-contain"
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <h4
+                                className={cn(
+                                  "text-xs sm:text-sm font-[652] truncate",
+                                  isResolved ? "line-through text-[var(--text-faint)]" : "text-[var(--ink)]"
+                                )}
+                              >
+                                {item.title}
+                              </h4>
+                              <p className="text-xs font-[456] text-[var(--text-muted)] line-clamp-2 mt-0.5 leading-relaxed">
+                                {item.context}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-[600] uppercase tracking-wider border",
+                                priorityBadge
+                              )}
+                            >
+                              {item.priority}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 text-xs border-t border-[var(--hairline-soft)]">
+                          <span className="text-[var(--text-faint)] font-mono flex items-center gap-1 text-[11px]">
+                            <Clock className="w-3 h-3" />
+                            {item.time}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => toggleResolve(item.id, e)}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-[600] transition-all cursor-pointer",
+                              isResolved
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                : "bg-[var(--canvas-soft)] hover:bg-[var(--field)] text-[var(--ink)] border border-[var(--hairline)]"
+                            )}
+                          >
+                            {isResolved ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-500" />
+                                <span>Resolved</span>
+                              </>
+                            ) : (
+                              <>
+                                <Circle className="w-3 h-3 text-[var(--text-muted)]" />
+                                <span>Mark Resolved</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* View More Redirect to Briefing */}
+              <div className="pt-2 border-t border-[var(--hairline-soft)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span className="text-xs text-[var(--text-muted)] font-[456]">
+                  Showing top {displayedItems.length} of {filteredItems.length} {priorityFilter !== "all" ? `${priorityFilter} priority` : "priority"} {filteredItems.length === 1 ? "item" : "items"}
+                </span>
+
+                <button
+                  type="button"
+                  id="view-more-briefing-btn"
+                  onClick={() => onNavigateTab("briefing")}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-[600] bg-[var(--canvas)] hover:bg-[var(--field)] text-[var(--ink)] border border-[var(--hairline)] transition-all cursor-pointer group active:scale-95 shadow-none shrink-0"
+                >
+                  <span>View More in Briefing</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--ink)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

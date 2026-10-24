@@ -215,7 +215,12 @@ export function DashboardShell() {
 
           {activeTab === "ai-agent" && <AiAgentView />}
 
-          {activeTab === "briefing" && <BriefingView />}
+          {activeTab === "briefing" && (
+            <BriefingView
+              currentUser={currentUser}
+              onNavigateTab={handleTabChange}
+            />
+          )}
 
           {activeTab === "integrations" && (
             <IntegrationsView

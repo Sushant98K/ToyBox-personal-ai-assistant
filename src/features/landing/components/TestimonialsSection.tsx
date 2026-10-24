@@ -3,7 +3,7 @@ import { customerTestimonials } from "@/config";
 
 export function TestimonialsSection() {
   return (
-    <section className="py-20 md:py-28 px-4 sm:px-6 bg-[var(--canvas)] border-b border-[var(--hairline-soft)] transition-colors duration-200">
+    <section className="py-20 md:py-28 px-4 sm:px-6 bg-transparent border-b border-[var(--hairline-soft)] transition-colors duration-200">
       <div className="max-w-5xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--canvas-soft)] text-xs font-[600] text-[var(--ink)] mb-4 border border-[var(--hairline)]">
