@@ -304,8 +304,16 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     }
   }, [searchParams, fetchDatabaseIntegrations]);
 
+  // Supported / Live integration platforms
+  const isPlatformAvailable = (id: string) => {
+    return id === "gmail" || id === "slack" || id === "whatsapp" || id === "gcal";
+  };
+
   // Connect click handler
   const handleConnectClick = async (platformId: string) => {
+    if (!isPlatformAvailable(platformId)) {
+      return;
+    }
     if (platformId === "whatsapp") {
       setConnectingId("whatsapp");
       setWhatsAppConnectionOpen(true);
@@ -412,6 +420,9 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
 
   // Toggle connection status and save directly in InsForge DB
   const toggleConnect = async (id: string) => {
+    if (!isPlatformAvailable(id)) {
+      return;
+    }
     const target = integrations.find((i) => i.id === id);
     if (!target) return;
 
@@ -874,6 +885,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
             const isConnected = item.status === "connected";
             const isConnecting = connectingId === item.id;
             const isDisconnecting = disconnectingId === item.id;
+            const isAvailable = isPlatformAvailable(item.id);
 
             return (
               <div
@@ -931,11 +943,6 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                       <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
                         {item.name}
                       </h3>
-                      {(item.id === "gmail" || item.id === "whatsapp" || item.id === "gcal" || item.id === "slack") && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
-                          MCP Enabled
-                        </span>
-                      )}
                     </div>
                     <span className="text-[11px] text-[var(--text-muted)] font-[500] block mt-0.5">
                       {item.category}
@@ -1007,8 +1014,8 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                           )}
                         </button>
                       </>
-                    ) : (
-                      /* Connect Button */
+                    ) : isAvailable ? (
+                      /* Active Connect Button */
                       <button
                         type="button"
                         onClick={() => handleConnectClick(item.id)}
@@ -1023,6 +1030,18 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                         ) : (
                           <span>Connect</span>
                         )}
+                      </button>
+                    ) : (
+                      /* Muted Coming Soon Badge Button - No action will perform */
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="w-full py-2 rounded-full text-xs font-[500] border border-[var(--hairline)] bg-[var(--field)] text-[var(--text-faint)] cursor-not-allowed select-none flex items-center justify-center gap-1.5 opacity-60"
+                        title="Integration coming soon"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-faint)] opacity-60" />
+                        <span>Coming Soon</span>
                       </button>
                     )}
                   </div>
