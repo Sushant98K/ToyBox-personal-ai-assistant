@@ -58,11 +58,13 @@ interface DashboardOverviewViewProps {
     name?: string;
     email?: string;
   } | null;
+  onSyncCountChange?: (count: number) => void;
 }
 
 export function DashboardOverviewView({
   onNavigateTab,
   currentUser,
+  onSyncCountChange,
 }: DashboardOverviewViewProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,6 +81,14 @@ export function DashboardOverviewView({
   const currentUserId = currentUser?.id;
   const currentUserEmail = currentUser?.email;
 
+  // Propagate active synced integrations count to shell sidebar
+  useEffect(() => {
+    if (platforms?.active) {
+      const activeCount = platforms.active.filter((p) => p.status === "connected").length;
+      onSyncCountChange?.(activeCount);
+    }
+  }, [platforms, onSyncCountChange]);
+
   // Mount effect to fetch initial dashboard data
   useEffect(() => {
     let isCancelled = false;
@@ -92,7 +102,13 @@ export function DashboardOverviewView({
         if (res.ok && !isCancelled) {
           const json = await res.json();
           if (json.brief_data) setData(json.brief_data);
-          if (json.platforms) setPlatforms(json.platforms);
+          if (json.platforms) {
+            setPlatforms(json.platforms);
+            if (json.platforms.active) {
+              const count = json.platforms.active.filter((p: any) => p.status === "connected").length;
+              onSyncCountChange?.(count);
+            }
+          }
           setIsCached(Boolean(json.cached));
           setUpdatedAt(json.updated_at || new Date().toISOString());
         }
@@ -106,7 +122,7 @@ export function DashboardOverviewView({
     return () => {
       isCancelled = true;
     };
-  }, [currentUserId, currentUserEmail]);
+  }, [currentUserId, currentUserEmail, onSyncCountChange]);
 
   // Explicit user-triggered manual refresh (bypasses 2-hour cache)
   const handleManualRefresh = useCallback(async () => {
@@ -353,34 +369,30 @@ export function DashboardOverviewView({
             </div>
           </div>
 
-          {/* Multi-platform Source Contributing Icons Row */}
+          {/* Multi-platform Source Contributing Icons Row (Actively reflects live connected feeds) */}
           <div className="flex items-center gap-2 self-start sm:self-auto bg-[var(--canvas)] px-3 py-1.5 rounded-full border border-[var(--hairline)]">
             <span className="text-xs text-[var(--text-muted)] font-[456] mr-1">Sources:</span>
             <div className="flex items-center gap-1.5">
-              <div
-                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
-                title="Gmail Synced"
-              >
-                <SocialIcon name="gmail" size={12} className="w-3 h-3 object-contain" />
-              </div>
-              <div
-                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
-                title="WhatsApp Synced"
-              >
-                <SocialIcon name="whatsapp" size={12} className="w-3 h-3 object-contain" />
-              </div>
-              <div
-                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
-                title="Slack Synced"
-              >
-                <SocialIcon name="slack" size={12} className="w-3 h-3 object-contain" />
-              </div>
-              <div
-                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
-                title="Google Calendar Synced"
-              >
-                <SocialIcon name="gcal" size={12} className="w-3 h-3 object-contain" />
-              </div>
+              {(platforms?.active
+                ? platforms.active.filter((p) => p.status === "connected")
+                : [
+                    { id: "gmail", name: "Gmail", icon: "gmail", status: "connected" as const, lastSync: "2h ago" },
+                    { id: "slack", name: "Slack", icon: "slack", status: "connected" as const, lastSync: "20h ago" },
+                    { id: "gcal", name: "Google Calendar", icon: "gcal", status: "connected" as const, lastSync: "2h ago" },
+                  ]
+              ).map((source) => (
+                <div
+                  key={source.id}
+                  className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
+                  title={`${source.name} Synced`}
+                >
+                  <SocialIcon
+                    name={source.icon as any}
+                    size={12}
+                    className="w-3 h-3 object-contain"
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </div>

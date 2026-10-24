@@ -43,7 +43,7 @@ async function resolveUserId(request: NextRequest): Promise<string> {
     return users[0].id;
   }
 
-  return "00000000-0000-0000-0000-000000000000";
+  return "a727d188-4197-409c-855d-2aa5201cebc7";
 }
 
 export async function POST(request: NextRequest) {

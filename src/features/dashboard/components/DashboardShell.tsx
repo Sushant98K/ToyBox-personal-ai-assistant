@@ -44,8 +44,18 @@ export function DashboardShell() {
     avatar_url?: string;
   } | null>(null);
 
-  // Dynamic synced integrations count for sidebar badge
-  const [syncedCount, setSyncedCount] = useState<number | null>(null);
+  // Dynamic synced integrations count for sidebar badge (persisted locally across tab switches)
+  const [syncedCount, setSyncedCount] = useState<number | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("toybox_synced_integrations_count");
+        if (cached !== null && !isNaN(Number(cached))) {
+          return Number(cached);
+        }
+      } catch {}
+    }
+    return 3;
+  });
 
   // Load user session from InsForge
   useEffect(() => {
@@ -67,7 +77,7 @@ export function DashboardShell() {
     loadUser();
   }, []);
 
-  // Fetch initial synced integrations count to reflect real database status in sidebar
+  // Fetch synced integrations count to reflect real database status in sidebar across tab changes
   useEffect(() => {
     let isMounted = true;
     async function loadIntegrationCount() {
@@ -80,7 +90,14 @@ export function DashboardShell() {
           const data = await res.json();
           if (data.integrations && Array.isArray(data.integrations)) {
             const count = data.integrations.filter((i: any) => i.status === "connected").length;
-            if (isMounted) setSyncedCount(count);
+            if (isMounted) {
+              setSyncedCount(count);
+              if (typeof window !== "undefined") {
+                try {
+                  localStorage.setItem("toybox_synced_integrations_count", String(count));
+                } catch {}
+              }
+            }
           }
         }
       } catch (err) {
@@ -91,7 +108,7 @@ export function DashboardShell() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.id, currentUser?.email]);
+  }, [currentUser?.id, currentUser?.email, activeTab]);
 
   // Update URL and tab state
   const handleTabChange = (tab: DashboardTab) => {
@@ -113,7 +130,15 @@ export function DashboardShell() {
   };
 
   const handleSyncCountChange = React.useCallback((count: number) => {
-    setSyncedCount((prev) => (prev === count ? prev : count));
+    setSyncedCount((prev) => {
+      if (prev === count) return prev;
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("toybox_synced_integrations_count", String(count));
+        } catch {}
+      }
+      return count;
+    });
   }, []);
 
   const badgeOverrides = syncedCount !== null ? { integrations: `${syncedCount} Synced` } : undefined;
@@ -184,6 +209,7 @@ export function DashboardShell() {
             <DashboardOverviewView
               onNavigateTab={handleTabChange}
               currentUser={currentUser}
+              onSyncCountChange={handleSyncCountChange}
             />
           )}
 

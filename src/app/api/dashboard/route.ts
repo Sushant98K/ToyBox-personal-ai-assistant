@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insforgeAdmin } from "@/lib/insforge-admin";
 import { GoogleGenAI } from "@google/genai";
-import { getWhatsAppStatus } from "@/lib/whatsapp-baileys";
+import { getWhatsAppStatus, getWhatsAppMessages } from "@/lib/whatsapp-baileys";
 import { platformsCatalog } from "@/config/integrations";
 
 // Schema for Gemini 3.5 Flash-Lite Output
@@ -489,13 +489,15 @@ async function fetchIntegrationsContext(userId: string) {
     }
   }
 
-  // 4. WhatsApp: Real connection status
+  // 4. WhatsApp: Real connection status & live buffered messages
   const whatsAppStatus = await getWhatsAppStatus(userId);
+  const liveWaMsgs = getWhatsAppMessages(userId);
   const whatsAppData = {
     status: whatsAppStatus.status,
     phoneNumber: whatsAppStatus.phoneNumber || "+91 9768368524",
     syncActive: whatsAppStatus.syncMessages,
-    unreadCount: 0,
+    unreadCount: liveWaMsgs.filter((m) => m.unread).length,
+    messages: liveWaMsgs.slice(0, 5),
   };
 
   return {

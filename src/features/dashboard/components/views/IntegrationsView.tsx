@@ -221,9 +221,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
 
   // Synchronize connected platforms count with parent DashboardShell safely in an effect
   useEffect(() => {
+    if (isLoadingDb) return; // Prevent overwriting shell state with 0 while initial DB status is loading
     const count = integrations.filter((i) => i.status === "connected").length;
     onSyncCountChange?.(count);
-  }, [integrations, onSyncCountChange]);
+  }, [integrations, isLoadingDb, onSyncCountChange]);
 
   // Handle Google OAuth callback redirect notification
   useEffect(() => {

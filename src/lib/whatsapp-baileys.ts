@@ -10,19 +10,10 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
 } from "@whiskeysockets/baileys";
-import { insforgeAdmin } from "./insforge-admin";
+import { insforgeAdmin } from "@/lib/insforge-admin";
+import type { WhatsAppSessionState, WhatsAppMessage } from "@/types/whatsapp";
 
-export interface WhatsAppSessionState {
-  userId: string;
-  phoneNumber?: string;
-  cleanPhone?: string;
-  status: "disconnected" | "connecting" | "awaiting_code" | "connected" | "error";
-  pairingCode?: string;
-  codeGeneratedAt?: string;
-  lastConnectedAt?: string;
-  errorMessage?: string;
-  syncMessages?: boolean;
-}
+export type { WhatsAppSessionState, WhatsAppMessage };
 
 // Global cache for sessions across hot-reloads and route requests in Next.js
 declare global {
@@ -30,6 +21,8 @@ declare global {
   var __whatsappSessions: Map<string, WhatsAppSessionState> | undefined;
   // eslint-disable-next-line no-var
   var __whatsappSockets: Map<string, WASocket> | undefined;
+  // eslint-disable-next-line no-var
+  var __whatsappMessageStore: Map<string, WhatsAppMessage[]> | undefined;
 }
 
 if (!globalThis.__whatsappSessions) {
@@ -38,9 +31,17 @@ if (!globalThis.__whatsappSessions) {
 if (!globalThis.__whatsappSockets) {
   globalThis.__whatsappSockets = new Map<string, WASocket>();
 }
+if (!globalThis.__whatsappMessageStore) {
+  globalThis.__whatsappMessageStore = new Map<string, WhatsAppMessage[]>();
+}
 
 const sessions = globalThis.__whatsappSessions;
 const sockets = globalThis.__whatsappSockets;
+const messageStore = globalThis.__whatsappMessageStore;
+
+export function getWhatsAppMessages(userId: string): WhatsAppMessage[] {
+  return messageStore.get(userId) || [];
+}
 
 // Format 8-character pairing code into "XXXX-XXXX" or "XXXX XXXX"
 function formatPairingCode(code: string): string {
@@ -390,7 +391,126 @@ async function createAndBindWASocket(
     }
   });
 
+  // Live message ingestion: listens for real-time incoming and outgoing messages
+  sock.ev.on("messages.upsert", async ({ messages: newMsgs }) => {
+    try {
+      const userList = messageStore.get(userId) || [];
+      for (const m of newMsgs) {
+        if (!m.key || m.key.remoteJid === "status@broadcast") continue;
+
+        const text =
+          m.message?.conversation ||
+          m.message?.extendedTextMessage?.text ||
+          m.message?.imageMessage?.caption ||
+          m.message?.videoMessage?.caption ||
+          (m.message?.reactionMessage ? `[Reaction: ${m.message.reactionMessage.text}]` : "") ||
+          "";
+
+        if (!text && !m.message) continue;
+
+        const chatJid = m.key.remoteJid || "";
+        const isGroup = chatJid.endsWith("@g.us");
+        const from = m.key.participant || chatJid;
+        const senderName = m.pushName || (m.key.fromMe ? "You" : from.split("@")[0]);
+        const id = m.key.id || `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const timestamp = m.messageTimestamp
+          ? new Date(Number(m.messageTimestamp) * 1000).toISOString()
+          : new Date().toISOString();
+
+        if (!userList.some((existing) => existing.id === id)) {
+          userList.unshift({
+            id,
+            from,
+            senderName,
+            chatJid,
+            text: text || "[Media message]",
+            timestamp,
+            isGroup,
+            fromMe: Boolean(m.key.fromMe),
+            unread: !m.key.fromMe,
+          });
+        }
+      }
+
+      messageStore.set(userId, userList.slice(0, 200));
+    } catch (err) {
+      console.warn("[Baileys] Error in messages.upsert handler:", err);
+    }
+  });
+
+  // History sync when companion connection is established
+  sock.ev.on("messaging-history.set", ({ messages: histMsgs }) => {
+    try {
+      const userList = messageStore.get(userId) || [];
+      for (const m of histMsgs || []) {
+        if (!m.key || m.key.remoteJid === "status@broadcast") continue;
+        const text =
+          m.message?.conversation ||
+          m.message?.extendedTextMessage?.text ||
+          m.message?.imageMessage?.caption ||
+          "";
+        if (!text) continue;
+        const chatJid = m.key.remoteJid || "";
+        const id = m.key.id || `hist_${Date.now()}`;
+        if (!userList.some((e) => e.id === id)) {
+          userList.push({
+            id,
+            from: m.key.participant || chatJid,
+            senderName: m.pushName || chatJid.split("@")[0],
+            chatJid,
+            text,
+            timestamp: m.messageTimestamp ? new Date(Number(m.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),
+            isGroup: chatJid.endsWith("@g.us"),
+            fromMe: Boolean(m.key.fromMe),
+            unread: !m.key.fromMe,
+          });
+        }
+      }
+      messageStore.set(userId, userList.slice(0, 200));
+    } catch (err) {
+      console.warn("[Baileys] Error in messaging-history.set handler:", err);
+    }
+  });
+
   return sock;
+}
+
+/**
+ * Retrieves the active Baileys socket for a user, or restores it from PostgreSQL credentials if registered.
+ */
+export async function getOrRestoreWASocket(userId: string): Promise<WASocket | null> {
+  const existing = sockets.get(userId);
+  if (existing) {
+    return existing;
+  }
+
+  try {
+    const { data: record } = await insforgeAdmin
+      .database
+      .from("user_integrations")
+      .select("status, credentials, metadata")
+      .eq("user_id", userId)
+      .eq("platform_id", "whatsapp")
+      .maybeSingle();
+
+    if (!record || record.status !== "connected") {
+      return null;
+    }
+
+    const authState = record.credentials?.auth_state;
+    if (!authState?.creds?.registered) {
+      return null;
+    }
+
+    const rawPhone = record.metadata?.phone_number || record.credentials?.phone_number || "+91 9768368524";
+    const { state, saveCreds } = await useDatabaseAuthState(userId, false);
+    const reconnectAttempts = { count: 0 };
+    const sock = await createAndBindWASocket(userId, rawPhone, state, saveCreds, reconnectAttempts);
+    return sock;
+  } catch (err) {
+    console.warn("[Baileys] Error restoring WhatsApp socket from DB:", err);
+    return null;
+  }
 }
 
 /**
@@ -580,6 +700,14 @@ export async function getWhatsAppStatus(
         syncMessages: data.metadata?.sync_messages ?? true,
       };
       sessions.set(userId, restored);
+
+      // Restore active background socket if missing in memory
+      if (!sockets.get(userId)) {
+        getOrRestoreWASocket(userId).catch((err) => {
+          console.warn("[Baileys] Background socket restore failed:", err);
+        });
+      }
+
       return restored;
     }
   } catch (err) {
@@ -682,74 +810,62 @@ export async function executeWhatsAppMcpTool(
   args: Record<string, any>,
   userId: string
 ) {
-  const sock = sockets.get(userId);
-  const session = sessions.get(userId);
+  let sock = sockets.get(userId);
+  if (!sock) {
+    sock = (await getOrRestoreWASocket(userId)) || undefined;
+  }
+  const session = await getWhatsAppStatus(userId);
   const isLiveConnected = sock !== undefined && session?.status === "connected";
+  const userPhone = session.phoneNumber || "+91 9768368524";
 
   switch (toolName) {
     case "whatsapp_fetch_recent_messages": {
       const limit = Number(args.limit) || 20;
       const unreadOnly = Boolean(args.unreadOnly);
 
-      const sampleMessages = [
-        {
-          id: "wamid.HBgLMjE2OTk5MTE5MjgVAgASGBQzQjE5RDAyQkY2QkExOTI=",
-          from: "+1 (555) 234-8901",
-          senderName: "David Miller (CTO, Nexus)",
-          chatJid: "15552348901@s.whatsapp.net",
-          text: "Hey Alex, following up on the AI agent latency metrics. Can we review today at 3pm?",
-          timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-          isGroup: false,
-          unread: true,
-        },
-        {
-          id: "wamid.HBgLMjE2OTk5MTE5MjgVAgASGBQzQjE5RDAyQkY2QkExOTM=",
-          from: "+44 7700 900123",
-          senderName: "Elena Rostova (KPMG)",
-          chatJid: "447700900123@s.whatsapp.net",
-          text: "Sent over the signed advisory engagement letter. Please confirm receipt.",
-          timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-          isGroup: false,
-          unread: false,
-        },
-        {
-          id: "wamid.HBgLMjE2OTk5MTE5MjgVAgASGBQzQjE5RDAyQkY2QkExOTQ=",
-          from: "+1 (555) 789-0123",
-          senderName: "Sarah Chen (Board Director)",
-          chatJid: "15557890123@s.whatsapp.net",
-          text: "Q3 ARR projections look phenomenal. Let's make sure slide 14 highlights the 142% net retention.",
-          timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-          isGroup: false,
-          unread: true,
-        },
-        {
-          id: "wamid.HBgLMjE2OTk5MTE5MjgVAgASGBQzQjE5RDAyQkY2QkExOTU=",
-          from: "+1 (555) 456-7890",
-          senderName: "Executive Leadership Team",
-          chatJid: "1203630284918293@g.us",
-          text: "Standup moved to 10:30am today due to the product launch kickoff.",
-          timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-          isGroup: true,
-          unread: false,
-        },
-      ];
-
-      const filtered = unreadOnly ? sampleMessages.filter((m) => m.unread) : sampleMessages;
+      const liveMessages = messageStore.get(userId) || [];
+      const filtered = unreadOnly ? liveMessages.filter((m) => m.unread) : liveMessages;
       const sliced = filtered.slice(0, limit);
+
+      if (sliced.length > 0) {
+        return {
+          mcpOutput: {
+            content: [
+              {
+                type: "text",
+                text: `Retrieved ${sliced.length} real WhatsApp messages via Baileys multi-device protocol (${sliced.filter(m => m.unread).length} unread).`,
+              },
+              {
+                type: "json",
+                protocol: "Baileys Multi-Device Webhook & MCP",
+                isLiveConnection: isLiveConnected,
+                accountPhone: userPhone,
+                messagesCount: sliced.length,
+                messages: sliced,
+              },
+            ],
+          },
+        };
+      }
 
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Retrieved ${sliced.length} WhatsApp messages via Baileys multi-device protocol (${sliced.filter(m => m.unread).length} unread).`,
+              text: isLiveConnected
+                ? `Connected live to WhatsApp account (${userPhone}). Listening for live incoming and outgoing messages.`
+                : `WhatsApp companion bridge is active for ${userPhone}. Please send or receive any message on WhatsApp to see it captured.`,
             },
             {
               type: "json",
               protocol: "Baileys Multi-Device Webhook & MCP",
               isLiveConnection: isLiveConnected,
-              messagesCount: sliced.length,
-              messages: sliced,
+              accountPhone: userPhone,
+              messagesCount: 0,
+              messages: [],
+              syncStatus: isLiveConnected ? "ACTIVE_LISTENING" : "RECONNECTING",
+              note: "Messages sent or received on WhatsApp stream into this session in real time.",
             },
           ],
         },
@@ -757,30 +873,27 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_read_chat_history": {
-      const chatJid = args.chatJid || "15552348901@s.whatsapp.net";
+      const chatJid = args.chatJid || "";
       const limit = Number(args.limit) || 25;
-
-      const chatHistory = [
-        { sender: "David Miller", text: "Hey Alex, do you have 5 mins for quick architecture sync?", timestamp: "10:14 AM", direction: "inbound" },
-        { sender: "You", text: "Sure David, reviewing the Baileys pairing flow now. Let me know what you need.", timestamp: "10:16 AM", direction: "outbound" },
-        { sender: "David Miller", text: "Awesome, our WebSocket latency dropped to 42ms after the streaming fix.", timestamp: "10:20 AM", direction: "inbound" },
-        { sender: "David Miller", text: "Can we review the latency metrics together around 3pm today?", timestamp: "10:22 AM", direction: "inbound" },
-        { sender: "You", text: "Locked into my calendar for 3pm. I will invite the engineering leads.", timestamp: "10:25 AM", direction: "outbound" },
-      ];
+      const allMessages = messageStore.get(userId) || [];
+      const history = chatJid
+        ? allMessages.filter((m) => m.chatJid === chatJid || m.from.includes(chatJid.replace(/[^0-9]/g, "")))
+        : allMessages;
 
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Retrieved ${chatHistory.length} messages from chat '${chatJid}' via Baileys.`,
+              text: `Retrieved ${history.length} messages from chat '${chatJid || "all"}' via Baileys.`,
             },
             {
               type: "json",
               chatJid,
-              totalRetrieved: chatHistory.length,
-              history: chatHistory.slice(0, limit),
+              totalRetrieved: history.length,
+              history: history.slice(0, limit),
               protocol: "Baileys Multi-Device Webhook & MCP",
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -788,18 +901,24 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_send_message": {
-      const recipientPhone = args.recipientPhone || "+1 (555) 123-4567";
-      const message = args.message || "Hello from ToyBox Assistant!";
+      const recipientPhone = args.recipientPhone || "";
+      const message = args.message || "";
 
-      let realSendStatus = "server_ack";
-      if (isLiveConnected && sock) {
+      let deliveryStatus = "failed";
+      let messageId = `wamid.HBgL${Date.now()}`;
+
+      if (isLiveConnected && sock && recipientPhone && message) {
         try {
           const clean = recipientPhone.replace(/[^0-9]/g, "");
           const jid = `${clean}@s.whatsapp.net`;
-          await sock.sendMessage(jid, { text: message });
-          realSendStatus = "live_socket_sent";
+          const sendRes = await sock.sendMessage(jid, { text: message });
+          deliveryStatus = "live_socket_sent";
+          if (sendRes?.key?.id) {
+            messageId = sendRes.key.id;
+          }
         } catch (e: any) {
-          console.warn("Live send message failed, fallback to verified ack:", e.message);
+          console.warn("Live send message failed:", e.message);
+          deliveryStatus = "socket_error";
         }
       }
 
@@ -808,17 +927,19 @@ export async function executeWhatsAppMcpTool(
           content: [
             {
               type: "text",
-              text: `Message successfully dispatched to ${recipientPhone} via Baileys WhatsApp Web protocol.`,
+              text: deliveryStatus === "live_socket_sent"
+                ? `Message successfully dispatched to ${recipientPhone} via Baileys WhatsApp Web protocol.`
+                : `Could not dispatch message to ${recipientPhone} (Status: ${deliveryStatus}).`,
             },
             {
               type: "json",
-              status: "SENT",
-              deliveryStatus: realSendStatus,
+              status: deliveryStatus === "live_socket_sent" ? "SENT" : "FAILED",
+              deliveryStatus,
               recipient: recipientPhone,
               messageContent: message,
-              messageId: `wamid.HBgL${Date.now()}`,
+              messageId,
               timestamp: new Date().toISOString(),
-              encryption: "End-to-End Encrypted (Signal Protocol)",
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -828,52 +949,28 @@ export async function executeWhatsAppMcpTool(
     case "whatsapp_search_chats": {
       const query = (args.query || "").toLowerCase();
       const limit = Number(args.limit) || 15;
-
-      const mockResults = [
-        {
-          chatName: "Executive Leadership",
-          sender: "Sarah Chen",
-          snippet: "...attaching updated Q3 board deck v4 with margin projections and EBITDA forecast...",
-          date: "Today at 9:15 AM",
-          relevance: 0.96,
-        },
-        {
-          chatName: "David Miller (CTO)",
-          sender: "David Miller",
-          snippet: "Let's review the AI agent latency metrics and board deck technical appendix.",
-          date: "Today at 10:22 AM",
-          relevance: 0.88,
-        },
-        {
-          chatName: "Marcus Vance (Acme Corp)",
-          sender: "Marcus Vance",
-          snippet: "Did Alex sign off on the slide 12 board deck notes and pricing addendum?",
-          date: "Yesterday at 4:30 PM",
-          relevance: 0.82,
-        },
-      ];
-
-      const matches = mockResults.filter((r) =>
-        r.snippet.toLowerCase().includes(query) ||
-        r.chatName.toLowerCase().includes(query) ||
-        r.sender.toLowerCase().includes(query)
+      const allMessages = messageStore.get(userId) || [];
+      const matches = allMessages.filter(
+        (m) =>
+          m.text.toLowerCase().includes(query) ||
+          m.senderName.toLowerCase().includes(query) ||
+          m.chatJid.toLowerCase().includes(query)
       );
-
-      const results = matches.length > 0 ? matches : mockResults;
 
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Found ${results.length} conversation matches for query '${args.query || "all"}'.`,
+              text: `Found ${matches.length} conversation matches for query '${args.query || "all"}'.`,
             },
             {
               type: "json",
               query: args.query,
-              matchCount: results.length,
-              results: results.slice(0, limit),
+              matchCount: matches.length,
+              results: matches.slice(0, limit),
               source: "WhatsApp Baileys Ingestion Engine",
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -881,27 +978,25 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_summarize_conversations": {
+      const allMessages = messageStore.get(userId) || [];
+      const summaryText =
+        allMessages.length > 0
+          ? `WhatsApp Summary: ${allMessages.length} real messages analyzed across active chats.`
+          : "No new messages stored in this session yet. Incoming chats will be summarized in real-time.";
+
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: "WhatsApp Executive Summary: 5 conversations analyzed. Key focus on Q3 Board Deck sign-off and CTO architecture review at 3pm.",
+              text: summaryText,
             },
             {
               type: "json",
               summaryTimeframe: args.timeframe || "today",
-              threadsAnalyzed: 5,
-              executiveHighlights: [
-                "David Miller (CTO) requested architecture review on AI agent latency today at 3pm.",
-                "Elena Rostova sent signed KPMG advisory letter requiring confirmation of receipt.",
-                "Sarah Chen confirmed Q3 ARR projections are finalized with 142% net retention.",
-              ],
-              actionItems: [
-                { task: "Join 3pm Zoom sync with David Miller", assignee: "Alex Mercer", urgency: "HIGH" },
-                { task: "Confirm receipt of KPMG engagement letter", assignee: "Alex Mercer", urgency: "MEDIUM" },
-              ],
-              sentimentScore: "Positive (88%)",
+              threadsAnalyzed: allMessages.length,
+              messages: allMessages.slice(0, 10),
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -909,24 +1004,37 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_get_contact_details": {
-      const phone = args.phoneNumber || "+1 555 234 8901";
+      const phone = args.phoneNumber || userPhone;
+      let statusAbout = "Available";
+      let profilePic = null;
+
+      if (isLiveConnected && sock) {
+        try {
+          const clean = phone.replace(/[^0-9]/g, "");
+          const jid = `${clean}@s.whatsapp.net`;
+          const statusRes = await sock.fetchStatus(jid).catch(() => null);
+          if (statusRes && typeof statusRes === "object" && "status" in statusRes) {
+            statusAbout = (statusRes as any).status || statusAbout;
+          }
+          profilePic = await sock.profilePictureUrl(jid, "image").catch(() => null);
+        } catch {
+          // ignore
+        }
+      }
+
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Contact details for ${phone}: David Miller (CTO, Nexus Systems) · Available.`,
+              text: `Contact details for ${phone}: ${statusAbout}.`,
             },
             {
               type: "json",
               phone,
-              verifiedName: "David Miller",
-              status: "Available · In deep work mode",
-              about: "CTO @ Nexus Systems | Distributed Systems & AI",
-              businessCategory: "Technology & Software",
-              presence: "online",
-              lastSeen: "Just now",
-              isBusinessAccount: true,
+              about: statusAbout,
+              profilePicUrl: profilePic,
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -934,28 +1042,20 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_list_groups": {
-      let realGroups: any[] = [];
+      let groups: any[] = [];
       if (isLiveConnected && sock) {
         try {
           const participating = await sock.groupFetchAllParticipating();
-          realGroups = Object.values(participating).map((g: any) => ({
+          groups = Object.values(participating).map((g: any) => ({
             id: g.id,
             subject: g.subject,
             participantsCount: g.participants?.length || 0,
             creation: new Date(g.creation * 1000).toISOString(),
           }));
         } catch (e: any) {
-          console.warn("Failed fetching live groups, using fallback:", e.message);
+          console.warn("Failed fetching live groups:", e.message);
         }
       }
-
-      const defaultGroups = [
-        { id: "1203630284918293@g.us", subject: "Executive Leadership Team", participantsCount: 8, creation: "2024-03-12" },
-        { id: "1203630291028345@g.us", subject: "Product & Engineering Core", participantsCount: 24, creation: "2024-01-08" },
-        { id: "1203630382910291@g.us", subject: "Series A Investors & Advisors", participantsCount: 12, creation: "2023-11-20" },
-      ];
-
-      const groups = realGroups.length > 0 ? realGroups : defaultGroups;
 
       return {
         mcpOutput: {
@@ -969,6 +1069,7 @@ export async function executeWhatsAppMcpTool(
               totalGroups: groups.length,
               groups: groups.slice(0, Number(args.limit) || 25),
               protocol: "Baileys Multi-Device Webhook & MCP",
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -976,26 +1077,25 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_fetch_group_messages": {
-      const groupJid = args.groupJid || "1203630284918293@g.us";
-      const sampleGroupMessages = [
-        { sender: "Sarah Chen", senderPhone: "+1 (555) 789-0123", text: "Team, board meeting starts in 45 mins. Final deck is locked.", timestamp: "8:15 AM" },
-        { sender: "Alex Mercer", senderPhone: "+1 (555) 555-1234", text: "Acknowledged. Opening live telemetry now.", timestamp: "8:20 AM" },
-        { sender: "David Miller", senderPhone: "+1 (555) 234-8901", text: "Architecture latency report has been uploaded to the shared folder.", timestamp: "8:24 AM" },
-      ];
+      const groupJid = args.groupJid || "";
+      const allMessages = messageStore.get(userId) || [];
+      const groupMsgs = groupJid
+        ? allMessages.filter((m) => m.chatJid === groupJid || m.isGroup)
+        : allMessages.filter((m) => m.isGroup);
 
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: `Retrieved ${sampleGroupMessages.length} messages from group '${groupJid}'.`,
+              text: `Retrieved ${groupMsgs.length} messages from group '${groupJid || "active"}'.`,
             },
             {
               type: "json",
               groupJid,
-              groupSubject: "Executive Leadership Team",
-              messagesCount: sampleGroupMessages.length,
-              messages: sampleGroupMessages,
+              messagesCount: groupMsgs.length,
+              messages: groupMsgs.slice(0, Number(args.limit) || 20),
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -1003,14 +1103,20 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_send_group_message": {
-      const groupJid = args.groupJid || "1203630284918293@g.us";
-      const message = args.message || "Executive update dispatched via ToyBox AI Assistant.";
+      const groupJid = args.groupJid || "";
+      const message = args.message || "";
+      let deliveryStatus = "failed";
+      let messageId = `wamid.HBgL${Date.now()}`;
 
-      if (isLiveConnected && sock) {
+      if (isLiveConnected && sock && groupJid && message) {
         try {
-          await sock.sendMessage(groupJid, { text: message });
+          const sendRes = await sock.sendMessage(groupJid, { text: message });
+          deliveryStatus = "live_socket_sent";
+          if (sendRes?.key?.id) {
+            messageId = sendRes.key.id;
+          }
         } catch (e: any) {
-          console.warn("Live send group message fallback:", e.message);
+          console.warn("Live send group message failed:", e.message);
         }
       }
 
@@ -1019,15 +1125,18 @@ export async function executeWhatsAppMcpTool(
           content: [
             {
               type: "text",
-              text: `Message successfully posted to WhatsApp group '${groupJid}'.`,
+              text: deliveryStatus === "live_socket_sent"
+                ? `Message successfully posted to WhatsApp group '${groupJid}'.`
+                : `Failed to post message to WhatsApp group '${groupJid}'.`,
             },
             {
               type: "json",
-              status: "SENT",
+              status: deliveryStatus === "live_socket_sent" ? "SENT" : "FAILED",
               groupJid,
               message,
-              messageId: `wamid.HBgL${Date.now()}`,
+              messageId,
               timestamp: new Date().toISOString(),
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
@@ -1035,21 +1144,22 @@ export async function executeWhatsAppMcpTool(
     }
 
     case "whatsapp_create_urgent_alert": {
+      const alertId = `alert_wa_${Date.now()}`;
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: "Urgent Alert Created: CTO review scheduled for 3pm today flagged as high priority.",
+              text: `Urgent Alert Created: WhatsApp alert triggered (${alertId}).`,
             },
             {
               type: "json",
-              alertId: `alert_wa_${Date.now()}`,
+              alertId,
               priority: "URGENT",
-              sourceChat: "+1 (555) 234-8901 (David Miller)",
-              keywordTrigger: "latency metrics review",
-              suggestedAction: "Confirm 3pm calendar block with CTO",
+              sourceChat: userPhone,
+              keywordTrigger: args.keyword || "manual alert",
               createdAt: new Date().toISOString(),
+              isLiveConnection: isLiveConnected,
             },
           ],
         },
