@@ -172,8 +172,12 @@ export function DashboardShell() {
         {/* Scrollable Viewport Content */}
         <main
           className={cn(
-            "flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 2xl:px-10 py-6 sm:py-8 w-full pb-24",
-            activeTab === "integrations" ? "max-w-none" : "max-w-7xl mx-auto"
+            "flex-1 overflow-y-auto w-full pb-24",
+            activeTab === "dashboard"
+              ? "max-w-none p-0 bg-[var(--canvas)]"
+              : activeTab === "integrations"
+              ? "max-w-none px-4 sm:px-6 md:px-8 2xl:px-10 py-6 sm:py-8"
+              : "max-w-7xl mx-auto px-4 sm:px-6 md:px-8 2xl:px-10 py-6 sm:py-8"
           )}
         >
           {activeTab === "dashboard" && (

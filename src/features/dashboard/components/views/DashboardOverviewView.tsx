@@ -1,28 +1,60 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  Mail,
   Sparkles,
-  Clock,
-  AlertCircle,
-  Play,
-  Pause,
-  CheckCircle2,
-  ArrowUpRight,
-  Bot,
-  Calendar,
+  RefreshCw,
+  Sun,
+  Sunrise,
+  Sunset,
+  Moon,
+  Mail,
+  CheckSquare,
   MessageSquare,
-  Newspaper,
-  ShieldCheck,
+  Clock,
+  ArrowUpRight,
+  Circle,
+  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Zap,
+  Check,
 } from "lucide-react";
 import { DashboardTab } from "../../types";
 import { cn } from "@/lib/utils";
 import { SocialIcon } from "@/components/icons/AppIcons";
 
+interface PriorityItem {
+  id: string;
+  platform: "gmail" | "slack" | "whatsapp" | "calendar";
+  title: string;
+  context: string;
+  time: string;
+  priority: "high" | "medium" | "urgent";
+}
+
+interface PlatformSummary {
+  id: string;
+  name: string;
+  icon: string;
+  status: "connected" | "disconnected";
+  lastSync: string;
+  account?: string | null;
+}
+
+interface DashboardBriefData {
+  important_count: number;
+  priority_count: number;
+  followup_count: number;
+  brief_bullets: string[];
+  priority_items: PriorityItem[];
+}
+
 interface DashboardOverviewViewProps {
   onNavigateTab: (tab: DashboardTab) => void;
   currentUser?: {
+    id?: string;
     name?: string;
     email?: string;
   } | null;
@@ -32,508 +64,663 @@ export function DashboardOverviewView({
   onNavigateTab,
   currentUser,
 }: DashboardOverviewViewProps) {
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [approvedActionIds, setApprovedActionIds] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [data, setData] = useState<DashboardBriefData | null>(null);
+  const [platforms, setPlatforms] = useState<{
+    active: PlatformSummary[];
+    extended: PlatformSummary[];
+  } | null>(null);
+  const [isCached, setIsCached] = useState<boolean>(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [showExtended, setShowExtended] = useState<boolean>(false);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
 
-  const toggleApprove = (id: number) => {
-    setApprovedActionIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
+  const currentUserId = currentUser?.id;
+  const currentUserEmail = currentUser?.email;
+
+  // Mount effect to fetch initial dashboard data
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadInitial() {
+      try {
+        const headers: Record<string, string> = {};
+        if (currentUserId) headers["x-user-id"] = currentUserId;
+        if (currentUserEmail) headers["x-user-email"] = currentUserEmail;
+
+        const res = await fetch("/api/dashboard", { headers, cache: "no-store" });
+        if (res.ok && !isCancelled) {
+          const json = await res.json();
+          if (json.brief_data) setData(json.brief_data);
+          if (json.platforms) setPlatforms(json.platforms);
+          setIsCached(Boolean(json.cached));
+          setUpdatedAt(json.updated_at || new Date().toISOString());
+        }
+      } catch (err) {
+        console.warn("Error fetching executive dashboard:", err);
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    }
+    loadInitial();
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUserId, currentUserEmail]);
+
+  // Explicit user-triggered manual refresh (bypasses 2-hour cache)
+  const handleManualRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (currentUserId) headers["x-user-id"] = currentUserId;
+      if (currentUserEmail) headers["x-user-email"] = currentUserEmail;
+
+      const res = await fetch("/api/dashboard?refresh=true", { headers, cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.brief_data) setData(json.brief_data);
+        if (json.platforms) setPlatforms(json.platforms);
+        setIsCached(Boolean(json.cached));
+        setUpdatedAt(json.updated_at || new Date().toISOString());
+      }
+    } catch (err) {
+      console.warn("Manual refresh failed:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [currentUserId, currentUserEmail]);
+
+  // Greeting based on time of day
+  const currentHour = new Date().getHours();
+  let greeting = "Good evening";
+  let GreetingIcon = Sunset;
+
+  if (currentHour >= 5 && currentHour < 12) {
+    greeting = "Good morning";
+    GreetingIcon = Sunrise;
+  } else if (currentHour >= 12 && currentHour < 17) {
+    greeting = "Good afternoon";
+    GreetingIcon = Sun;
+  } else if (currentHour >= 17 && currentHour < 22) {
+    greeting = "Good evening";
+    GreetingIcon = Sunset;
+  } else {
+    greeting = "Good night";
+    GreetingIcon = Moon;
+  }
 
   const executiveName =
     currentUser?.name || currentUser?.email?.split("@")[0] || "Executive";
 
+  // Toggle resolution for priority items
+  const toggleResolve = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setResolvedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Helper to format relative updated time
+  const formatLastSync = (dateStr: string | null) => {
+    if (!dateStr) return "Just now";
+    const date = new Date(dateStr);
+    const diffSec = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return "Just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    return `${diffHr}h ago`;
+  };
+
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-200">
-      {/* ─── Hero Welcome Banner ─── */}
-      <div className="relative overflow-hidden rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 sm:p-8">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)]">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>All 5 Communication Channels Synthesized</span>
+    <div className="flex-1 w-full min-w-0 max-w-none px-4 sm:px-6 md:px-8 py-6 space-y-6 sm:space-y-8 bg-[var(--canvas)] text-[var(--ink)] transition-colors duration-200">
+      {/* ─── A. Welcome & Action Header ─── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[var(--hairline-soft)]">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas-soft)] border border-[var(--hairline)] text-[var(--ink)] shrink-0"
+              style={{ borderRadius: "30%" }}
+            >
+              <GreetingIcon className="w-4 h-4 text-[var(--ink)] stroke-[1.8]" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">
-              Good evening, {executiveName}.
-            </h2>
-            <p className="text-sm sm:text-base text-[var(--text-muted)] max-w-2xl font-[300]">
-              ToyBox.ai processed 348 incoming messages across Gmail, Slack, WhatsApp, and Outlook. 
-              2 high-priority items require your approval, and 36 background tasks were handled autonomously.
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-[652] tracking-tight text-[var(--ink)] leading-[1.13]">
+              {greeting}, {executiveName}.
+            </h1>
+          </div>
+          <p className="text-sm font-[300] text-[var(--text-muted)] pl-0.5 leading-relaxed">
+            Multi-platform executive intelligence synthesized across your connected communication channels.
+          </p>
+        </div>
+
+        {/* Action Bar (Right-aligned) */}
+        <div className="flex items-center gap-2.5 self-start lg:self-auto shrink-0">
+          {/* Cache indicator pill */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs font-[456] text-[var(--text-muted)]">
+            <span
+              className={cn(
+                "w-1.5 h-1.5 rounded-full",
+                isCached ? "bg-emerald-500" : "bg-[#0066FF] animate-pulse"
+              )}
+            />
+            <span>
+              {isCached ? "2h Cache Active" : "Fresh Synthesis"}
+              {updatedAt && ` • ${formatLastSync(updatedAt)}`}
+            </span>
           </div>
 
-          {/* Audio Executive Briefing Quick-Pill */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsPlayingAudio(!isPlayingAudio)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all font-[600] text-xs sm:text-sm shadow-xs focus:outline-none"
-            >
-              {isPlayingAudio ? (
-                <Pause className="w-4 h-4" />
-              ) : (
-                <Play className="w-4 h-4 fill-current" />
-              )}
-              <span>{isPlayingAudio ? "Pause Audio Brief" : "Listen to Brief (3m)"}</span>
-            </button>
+          {/* Refresh / Regenerate Button (Mobbin button-outline) */}
+          <button
+            type="button"
+            id="refresh-dashboard-btn"
+            onClick={handleManualRefresh}
+            disabled={refreshing || loading}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--canvas)] hover:bg-[var(--field)] active:scale-95 border border-[var(--hairline)] text-[var(--ink)] text-xs sm:text-sm font-[600] transition-all disabled:opacity-50 cursor-pointer shadow-none"
+          >
+            <RefreshCw
+              className={cn("w-3.5 h-3.5 text-[#0066FF]", refreshing && "animate-spin")}
+            />
+            <span>{refreshing ? "Synthesizing..." : "Refresh"}</span>
+          </button>
+        </div>
+      </div>
 
+      {/* ─── B. Stats Cards Row (3 Cards Grid) ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+        {/* Card 1: Important Updates */}
+        <div className="relative overflow-hidden rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 transition-all group">
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className="w-10 h-10 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] group-hover:scale-105 transition-transform"
+              style={{ borderRadius: "30%" }}
+            >
+              <Mail className="w-5 h-5 stroke-[1.8] text-[var(--ink)]" />
+            </div>
+            <span className="text-xs font-[600] text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20">
+              Action Required
+            </span>
+          </div>
+          <div>
+            <div className="text-3xl sm:text-4xl font-[652] text-[var(--ink)] tracking-tight leading-none">
+              {loading ? (
+                <div className="w-14 h-9 bg-[var(--field)] rounded-full animate-pulse" />
+              ) : (
+                data?.important_count ?? 0
+              )}
+            </div>
+            <div className="text-sm font-[652] text-[var(--ink)] mt-2">
+              Important Updates
+            </div>
+            <div className="text-xs font-[456] text-[var(--text-muted)] mt-1 leading-relaxed">
+              Urgent messages and inbox items requiring executive attention
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Priority Tasks */}
+        <div className="relative overflow-hidden rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 transition-all group">
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className="w-10 h-10 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] group-hover:scale-105 transition-transform"
+              style={{ borderRadius: "30%" }}
+            >
+              <CheckSquare className="w-5 h-5 stroke-[1.8] text-[var(--ink)]" />
+            </div>
+            <span className="text-xs font-[600] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+              Pending Review
+            </span>
+          </div>
+          <div>
+            <div className="text-3xl sm:text-4xl font-[652] text-[var(--ink)] tracking-tight leading-none">
+              {loading ? (
+                <div className="w-14 h-9 bg-[var(--field)] rounded-full animate-pulse" />
+              ) : (
+                data?.priority_count ?? 0
+              )}
+            </div>
+            <div className="text-sm font-[652] text-[var(--ink)] mt-2">
+              Priority Tasks
+            </div>
+            <div className="text-xs font-[456] text-[var(--text-muted)] mt-1 leading-relaxed">
+              Flagged items, calendar milestones, and operational decisions
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Follow-ups */}
+        <div className="relative overflow-hidden rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 transition-all group">
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className="w-10 h-10 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] group-hover:scale-105 transition-transform"
+              style={{ borderRadius: "30%" }}
+            >
+              <MessageSquare className="w-5 h-5 stroke-[1.8] text-[var(--ink)]" />
+            </div>
+            <span className="text-xs font-[600] text-[var(--text-muted)] bg-[var(--canvas)] px-2.5 py-0.5 rounded-full border border-[var(--hairline)]">
+              Awaiting Reply
+            </span>
+          </div>
+          <div>
+            <div className="text-3xl sm:text-4xl font-[652] text-[var(--ink)] tracking-tight leading-none">
+              {loading ? (
+                <div className="w-14 h-9 bg-[var(--field)] rounded-full animate-pulse" />
+              ) : (
+                data?.followup_count ?? 0
+              )}
+            </div>
+            <div className="text-sm font-[652] text-[var(--ink)] mt-2">
+              Follow-ups
+            </div>
+            <div className="text-xs font-[456] text-[var(--text-muted)] mt-1 leading-relaxed">
+              Unresolved discussions and scheduled reminder checkpoints
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── C. Today's Brief (Single Consolidated Card) ─── */}
+      <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 sm:p-8 space-y-6 transition-colors">
+        {/* Header with AI Badge & Contributing Platform Icons */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--hairline-soft)]">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[#0066FF] shrink-0"
+              style={{ borderRadius: "30%" }}
+            >
+              <Sparkles className="w-4 h-4 fill-current" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-[652] text-[var(--ink)] tracking-tight">
+                  Today&apos;s Brief.
+                </h2>
+                {/* Mobbin badge-popular using the single accent electric blue */}
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0066FF] text-white text-[11px] font-[600]">
+                  <Sparkles className="w-3 h-3 fill-current" />
+                  Gemini 3.5 Flash-Lite
+                </span>
+              </div>
+              <p className="text-xs font-[300] text-[var(--text-muted)] mt-0.5">
+                Consolidated cross-channel synthesis generated {formatLastSync(updatedAt)}
+              </p>
+            </div>
+          </div>
+
+          {/* Multi-platform Source Contributing Icons Row */}
+          <div className="flex items-center gap-2 self-start sm:self-auto bg-[var(--canvas)] px-3 py-1.5 rounded-full border border-[var(--hairline)]">
+            <span className="text-xs text-[var(--text-muted)] font-[456] mr-1">Sources:</span>
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
+                title="Gmail Synced"
+              >
+                <SocialIcon name="gmail" size={12} className="w-3 h-3 object-contain" />
+              </div>
+              <div
+                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
+                title="WhatsApp Synced"
+              >
+                <SocialIcon name="whatsapp" size={12} className="w-3 h-3 object-contain" />
+              </div>
+              <div
+                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
+                title="Slack Synced"
+              >
+                <SocialIcon name="slack" size={12} className="w-3 h-3 object-contain" />
+              </div>
+              <div
+                className="w-5 h-5 flex items-center justify-center bg-[var(--canvas-soft)] rounded-full p-0.5"
+                title="Google Calendar Synced"
+              >
+                <SocialIcon name="gcal" size={12} className="w-3 h-3 object-contain" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 to 4 High-Impact Bullet Points Inside the Consolidated Card */}
+        <div className="space-y-3">
+          {loading ? (
+            <div className="space-y-3 py-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="w-2 h-2 rounded-full bg-[var(--hairline)] mt-2 shrink-0 animate-pulse" />
+                  <div className="h-4 bg-[var(--canvas)] rounded w-full animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            (data?.brief_bullets || []).map((bullet, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-3 p-3.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] hover:border-[var(--hairline)] transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#0066FF] mt-1.5 shrink-0" />
+                <p className="text-xs sm:text-sm text-[var(--ink)] leading-relaxed font-[456]">
+                  {bullet}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Fast-Action Shortcuts Bar */}
+        <div className="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--hairline-soft)]">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => onNavigateTab("briefing")}
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] hover:bg-[var(--field)] transition-all font-[600] text-xs sm:text-sm focus:outline-none"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 font-[600] text-xs sm:text-sm transition-all cursor-pointer"
             >
-              <span>Read Full Report</span>
+              <span>Review in Briefings</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab("ai-agent")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--canvas)] hover:bg-[var(--field)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)] transition-all cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-[#0066FF]" />
+              <span>Ask Agent Fleet</span>
+            </button>
           </div>
+
+          <span className="text-xs text-[var(--text-faint)] font-[456]">
+            Model: gemini-3.5-flash-lite • Sub-second latency.
+          </span>
         </div>
       </div>
 
-      {/* ─── Metric KPI Cards with Minimal Theme Squircles ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        {/* KPI 1: Communications */}
-        <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between hover:border-[var(--ink-soft)]/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            {/* Minimal Squircle Icon */}
-            <div
-              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shadow-2xs"
-              style={{ borderRadius: "30%" }}
-            >
-              <Mail className="w-4 h-4 stroke-[1.8]" />
-            </div>
-            <span className="text-[11px] font-[600] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-              +14% vs yday
-            </span>
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">348</div>
-            <div className="text-xs font-[600] text-[var(--ink-soft)] mt-0.5">
-              Messages Distilled
-            </div>
-            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Gmail, Slack, WhatsApp & Outlook
-            </div>
-          </div>
-        </div>
-
-        {/* KPI 2: Autonomous Actions */}
-        <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between hover:border-[var(--ink-soft)]/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            {/* Minimal Squircle Icon */}
-            <div
-              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shadow-2xs"
-              style={{ borderRadius: "30%" }}
-            >
-              <Sparkles className="w-4 h-4 stroke-[1.8]" />
-            </div>
-            <span className="text-[11px] font-[600] text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">
-              Autopilot
-            </span>
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">36</div>
-            <div className="text-xs font-[600] text-[var(--ink-soft)] mt-0.5">
-              Autonomous Actions
-            </div>
-            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Auto-replies, calendar holds & notes
-            </div>
-          </div>
-        </div>
-
-        {/* KPI 3: Time Saved */}
-        <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between hover:border-[var(--ink-soft)]/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            {/* Minimal Squircle Icon */}
-            <div
-              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shadow-2xs"
-              style={{ borderRadius: "30%" }}
-            >
-              <Clock className="w-4 h-4 stroke-[1.8]" />
-            </div>
-            <span className="text-[11px] font-[600] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-              This Week
-            </span>
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">16.4 hrs</div>
-            <div className="text-xs font-[600] text-[var(--ink-soft)] mt-0.5">
-              Executive Time Saved
-            </div>
-            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              ~2.3 hrs freed up daily for deep work
-            </div>
-          </div>
-        </div>
-
-        {/* KPI 4: Urgent Signals */}
-        <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between hover:border-[var(--ink-soft)]/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            {/* Minimal Squircle Icon */}
-            <div
-              className="w-9 h-9 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-rose-500 shadow-2xs"
-              style={{ borderRadius: "30%" }}
-            >
-              <AlertCircle className="w-4 h-4 stroke-[1.8]" />
-            </div>
-            <span className="text-[11px] font-[600] text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
-              Action Req
-            </span>
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-[652] text-[var(--ink)] tracking-tight">2</div>
-            <div className="text-xs font-[600] text-[var(--ink-soft)] mt-0.5">
-              Urgent Decisions
-            </div>
-            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Board rescheduling & NDA sign-off
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Two-Column Interactive Sections ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Priority Action Queue & Today's Executive Brief */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Action Decision Center */}
-          <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline)]">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-rose-500 shadow-2xs"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <AlertCircle className="w-4 h-4 stroke-[1.8]" />
-                </div>
-                <div>
-                  <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
-                    Pending Executive Decisions
-                  </h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    ToyBox prepared 1-click execution drafts for your review
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigateTab("alerts")}
-                className="text-xs font-[600] text-[#0066FF] hover:underline flex items-center gap-1"
+      {/* ─── D. Side-by-Side Row (Connected Apps & Priority Items) ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Connected Platforms Card */}
+        <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 sm:p-7 space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline-soft)]">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shrink-0"
+                style={{ borderRadius: "30%" }}
               >
-                <span>View all</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+                <Layers className="w-4 h-4 stroke-[1.8]" />
+              </div>
+              <div>
+                <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
+                  Connected Platforms.
+                </h3>
+                <p className="text-xs font-[300] text-[var(--text-muted)]">
+                  Live connection & sync status across channels
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => onNavigateTab("integrations")}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[var(--canvas)] hover:bg-[var(--field)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)] transition-colors cursor-pointer"
+            >
+              <span>Manage</span>
+              <ArrowUpRight className="w-3 h-3" />
+            </button>
+          </div>
 
-            {/* Decision Item 1 */}
-            <div className="p-4 rounded-[18px] bg-[var(--canvas)] border border-[var(--hairline)] space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-500">
-                      High Priority
-                    </span>
-                    <span className="text-[11px] font-[500] text-[var(--text-muted)]">
-                      Slack #board-directors • 14m ago
-                    </span>
+          {/* Current Active Platforms List */}
+          <div className="space-y-2.5">
+            {loading ? (
+              <div className="space-y-2 py-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-12 bg-[var(--canvas)] rounded-[16px] animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              (platforms?.active || [
+                { id: "gmail", name: "Gmail", icon: "gmail", status: "connected", lastSync: "Just now" },
+                { id: "whatsapp", name: "WhatsApp", icon: "whatsapp", status: "connected", lastSync: "Just now" },
+                { id: "slack", name: "Slack", icon: "slack", status: "connected", lastSync: "18h ago" },
+                { id: "gcal", name: "Google Calendar", icon: "gcal", status: "connected", lastSync: "Just now" },
+              ]).map((platform) => {
+                const isConn = platform.status === "connected";
+                return (
+                  <div
+                    key={platform.id}
+                    className="p-3.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] hover:border-[var(--hairline)] flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-8 h-8 bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1.5"
+                        style={{ borderRadius: "30%" }}
+                      >
+                        <SocialIcon
+                          name={platform.icon}
+                          size={16}
+                          className="w-4 h-4 object-contain"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-[652] text-xs sm:text-sm text-[var(--ink)] truncate">
+                            {platform.name}
+                          </span>
+                        </div>
+                        {platform.account && (
+                          <p className="text-[11px] font-[456] text-[var(--text-muted)] truncate">
+                            {platform.account}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[11px] text-[var(--text-faint)] font-mono hidden sm:inline-block">
+                        {platform.lastSync}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-[600] border",
+                          isConn
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-[var(--canvas-soft)] text-[var(--text-faint)] border-[var(--hairline)]"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            isConn ? "bg-emerald-500 animate-pulse" : "bg-[var(--text-faint)]"
+                          )}
+                        />
+                        <span>{isConn ? "Connected" : "Disconnected"}</span>
+                      </span>
+                    </div>
                   </div>
-                  <h4 className="text-sm font-[600] text-[var(--ink)]">
-                    Approve Q4 Strategy Session Rescheduling to 4:30 PM EST
-                  </h4>
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed font-[300]">
-                    Lead Investor requested a 30-min shift due to flight delay. ToyBox already verified your calendar and found no hard conflicts.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-[var(--hairline-soft)]">
-                <span className="text-[11px] text-[var(--text-faint)]">
-                  Action: Send Slack confirmation & update Google Meet
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleApprove(1)}
-                  className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all flex items-center gap-1.5 self-start sm:self-auto",
-                    approvedActionIds.includes(1)
-                      ? "bg-emerald-600 text-white"
-                      : "bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90"
-                  )}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{approvedActionIds.includes(1) ? "Executed" : "Approve & Send"}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Decision Item 2 */}
-            <div className="p-4 rounded-[18px] bg-[var(--canvas)] border border-[var(--hairline)] space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                      Financial Review
-                    </span>
-                    <span className="text-[11px] font-[500] text-[var(--text-muted)]">
-                      WhatsApp VIP Channel • 42m ago
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-[600] text-[var(--ink)]">
-                    Sign-off on Revised Enterprise SLA Clause for Datadog integration
-                  </h4>
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed font-[300]">
-                    VP of Procurement sent amended terms. ToyBox legal assistant compared diffs and flagged 99.95% uptime clause as acceptable.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-[var(--hairline-soft)]">
-                <span className="text-[11px] text-[var(--text-faint)]">
-                  Action: Sign PDF & notify account manager via WhatsApp
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleApprove(2)}
-                  className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-[600] transition-all flex items-center gap-1.5 self-start sm:self-auto",
-                    approvedActionIds.includes(2)
-                      ? "bg-emerald-600 text-white"
-                      : "bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90"
-                  )}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{approvedActionIds.includes(2) ? "Signed & Sent" : "Execute Sign-Off"}</span>
-                </button>
-              </div>
-            </div>
+                );
+              })
+            )}
           </div>
 
-          {/* Today's Key Highlights Preview */}
-          <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline)]">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shadow-2xs"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <Newspaper className="w-4 h-4 stroke-[1.8]" />
-                </div>
-                <div>
-                  <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
-                    Daily Executive Synthesis Highlights
-                  </h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">
-                    Compiled automatically from all synced channels
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigateTab("briefing")}
-                className="text-xs font-[600] text-[#0066FF] hover:underline"
-              >
-                Read full brief ↗
-              </button>
-            </div>
+          {/* Extensible Future Platforms Section (Collapsible Accordion) */}
+          <div className="pt-2 border-t border-[var(--hairline-soft)]">
+            <button
+              type="button"
+              onClick={() => setShowExtended(!showExtended)}
+              className="w-full flex items-center justify-between text-xs text-[var(--text-muted)] hover:text-[var(--ink)] transition-colors py-1 cursor-pointer font-[600]"
+            >
+              <span>Upcoming Platform Integrations (6 Channels)</span>
+              {showExtended ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                <div className="space-y-0.5">
-                  <span className="font-[600] text-[var(--ink)]">
-                    Stripe Monthly Run-Rate Reached $142,000 (+18%)
-                  </span>
-                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                    New enterprise tier activations accounted for 64% of expansion revenue. No churn events recorded today.
-                  </p>
-                </div>
+            {showExtended && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3 animate-in fade-in duration-200">
+                {(platforms?.extended || [
+                  { id: "outlook", name: "Outlook", icon: "outlook", status: "disconnected", lastSync: "Never" },
+                  { id: "discord", name: "Discord", icon: "discord", status: "disconnected", lastSync: "Never" },
+                  { id: "linkedin", name: "LinkedIn", icon: "linkedin", status: "disconnected", lastSync: "Never" },
+                  { id: "telegram", name: "Telegram", icon: "telegram", status: "disconnected", lastSync: "Never" },
+                  { id: "notion", name: "Notion", icon: "notion", status: "disconnected", lastSync: "Never" },
+                  { id: "reddit", name: "Reddit", icon: "reddit", status: "disconnected", lastSync: "Never" },
+                ]).map((ext) => (
+                  <div
+                    key={ext.id}
+                    className="p-2.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2"
+                  >
+                    <div
+                      className="w-6 h-6 bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
+                      style={{ borderRadius: "30%" }}
+                    >
+                      <SocialIcon name={ext.icon} size={12} className="w-3 h-3 object-contain" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-[652] text-[var(--ink)] truncate">
+                        {ext.name}
+                      </p>
+                      <span className="text-[10px] font-[456] text-[var(--text-faint)]">Ready</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                <div className="space-y-0.5">
-                  <span className="font-[600] text-[var(--ink)]">
-                    Candidate Offer Accepted: Principal AI Engineer
-                  </span>
-                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                    Signed offer letter received via Outlook. Onboarding workflow initiated in Notion and Slack #team.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0" />
-                <div className="space-y-0.5">
-                  <span className="font-[600] text-[var(--ink)]">
-                    Calendar Gatekeeper Blocked 3 Unsolicited Meeting Invites
-                  </span>
-                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                    ToyBox intercepted cold pitch invitations and routed them to standard async review forms, saving 90 minutes.
-                  </p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Right 1 Col: Autonomous Agent Fleet Live Status */}
-        <div className="space-y-6">
-          <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline)]">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shadow-2xs"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <Bot className="w-4 h-4 stroke-[1.8]" />
-                </div>
-                <div>
-                  <h3 className="font-[652] text-sm text-[var(--ink)]">
-                    Agent Fleet
-                  </h3>
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    4 Micro-agents
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigateTab("ai-agent")}
-                className="text-xs font-[600] text-[#0066FF] hover:underline"
+        {/* Right Column: Priority Items Card */}
+        <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline-soft)] p-6 sm:p-7 space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--hairline-soft)]">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-8 h-8 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] text-[var(--ink)] shrink-0"
+                style={{ borderRadius: "30%" }}
               >
-                Manage
-              </button>
+                <ShieldAlert className="w-4 h-4 stroke-[1.8]" />
+              </div>
+              <div>
+                <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)]">
+                  Priority Items.
+                </h3>
+                <p className="text-xs font-[300] text-[var(--text-muted)]">
+                  Immediate actions extracted across connected apps
+                </p>
+              </div>
             </div>
 
-            {/* Agent 1 */}
-            <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <SocialIcon name="gmail" size={14} className="w-3.5 h-3.5 object-contain" />
-                </div>
-                <div>
-                  <p className="text-xs font-[600] text-[var(--ink)]">Inbox Triager</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">Gmail & Outlook</p>
-                </div>
-              </div>
-              <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active
-              </span>
-            </div>
-
-            {/* Agent 2 */}
-            <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <SocialIcon name="whatsapp" size={14} className="w-3.5 h-3.5 object-contain" />
-                </div>
-                <div>
-                  <p className="text-xs font-[600] text-[var(--ink)]">Chat Gatekeeper</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">WhatsApp & Telegram</p>
-                </div>
-              </div>
-              <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active
-              </span>
-            </div>
-
-            {/* Agent 3 */}
-            <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <SocialIcon name="gcal" size={14} className="w-3.5 h-3.5 object-contain" />
-                </div>
-                <div>
-                  <p className="text-xs font-[600] text-[var(--ink)]">Calendar Assistant</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">Google Meet & Cal</p>
-                </div>
-              </div>
-              <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active
-              </span>
-            </div>
-
-            {/* Agent 4 */}
-            <div className="p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-7 h-7 bg-[var(--canvas)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1"
-                  style={{ borderRadius: "30%" }}
-                >
-                  <SocialIcon name="notion" size={14} className="w-3.5 h-3.5 object-contain" />
-                </div>
-                <div>
-                  <p className="text-xs font-[600] text-[var(--ink)]">Briefing Analyst</p>
-                  <p className="text-[10px] text-[var(--text-muted)]">Daily Synthesis</p>
-                </div>
-              </div>
-              <span className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Standby
-              </span>
-            </div>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)]">
+              {data?.priority_items?.length || 4} Pending
+            </span>
           </div>
 
-          {/* Connected Integrations Quick Strip */}
-          <div className="rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-[652] text-sm text-[var(--ink)]">
-                Live Feeds
-              </h3>
-              <button
-                type="button"
-                onClick={() => onNavigateTab("integrations")}
-                className="text-xs font-[600] text-[#0066FF] hover:underline"
-              >
-                Configure
-              </button>
-            </div>
+          {/* List of 3 to 4 Urgent Items */}
+          <div className="space-y-3">
+            {loading ? (
+              <div className="space-y-3 py-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-20 bg-[var(--canvas)] rounded-[16px] animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              (data?.priority_items || []).map((item) => {
+                const isResolved = resolvedIds.has(item.id);
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
-                <SocialIcon name="gmail" size={16} className="w-4 h-4 object-contain" />
-                <span className="font-[600] text-[var(--ink)] text-xs">Gmail</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
-                <SocialIcon name="slack" size={16} className="w-4 h-4 object-contain" />
-                <span className="font-[600] text-[var(--ink)] text-xs">Slack</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
-                <SocialIcon name="whatsapp" size={16} className="w-4 h-4 object-contain" />
-                <span className="font-[600] text-[var(--ink)] text-xs">WhatsApp</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live
-                </span>
-              </div>
-              <div className="p-2.5 rounded-xl bg-[var(--canvas)] border border-[var(--hairline-soft)] flex items-center gap-2.5">
-                <SocialIcon name="outlook" size={16} className="w-4 h-4 object-contain" />
-                <span className="font-[600] text-[var(--ink)] text-xs">Outlook</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium ml-auto flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live
-                </span>
-              </div>
-            </div>
+                const priorityBadge = {
+                  urgent: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+                  high: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                  medium: "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]",
+                }[item.priority] || "bg-[var(--canvas-soft)] text-[var(--text-muted)] border-[var(--hairline)]";
+
+                return (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "p-4 rounded-[16px] bg-[var(--canvas)] border transition-all space-y-2.5 group",
+                      isResolved
+                        ? "border-[var(--hairline-soft)] opacity-60"
+                        : "border-[var(--hairline-soft)] hover:border-[var(--hairline)]"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div
+                          className="w-7 h-7 bg-[var(--canvas-soft)] border border-[var(--hairline)] flex items-center justify-center shrink-0 p-1 mt-0.5"
+                          style={{ borderRadius: "30%" }}
+                        >
+                          <SocialIcon
+                            name={item.platform}
+                            size={14}
+                            className="w-3.5 h-3.5 object-contain"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <h4
+                            className={cn(
+                              "text-xs sm:text-sm font-[652] truncate",
+                              isResolved ? "line-through text-[var(--text-faint)]" : "text-[var(--ink)]"
+                            )}
+                          >
+                            {item.title}
+                          </h4>
+                          <p className="text-xs font-[456] text-[var(--text-muted)] line-clamp-2 mt-0.5 leading-relaxed">
+                            {item.context}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-[600] uppercase tracking-wider border",
+                            priorityBadge
+                          )}
+                        >
+                          {item.priority}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 text-xs border-t border-[var(--hairline-soft)]">
+                      <span className="text-[var(--text-faint)] font-mono flex items-center gap-1 text-[11px]">
+                        <Clock className="w-3 h-3" />
+                        {item.time}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={(e) => toggleResolve(item.id, e)}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-[600] transition-all cursor-pointer",
+                          isResolved
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                            : "bg-[var(--canvas-soft)] hover:bg-[var(--field)] text-[var(--ink)] border border-[var(--hairline)]"
+                        )}
+                      >
+                        {isResolved ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-500" />
+                            <span>Resolved</span>
+                          </>
+                        ) : (
+                          <>
+                            <Circle className="w-3 h-3 text-[var(--text-muted)]" />
+                            <span>Mark Resolved</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

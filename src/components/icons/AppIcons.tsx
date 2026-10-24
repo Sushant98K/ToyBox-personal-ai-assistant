@@ -17,7 +17,8 @@ export type SocialIconName =
   | "gcal"
   | "notion"
   | "discord"
-  | "linkedin";
+  | "linkedin"
+  | "reddit";
 
 interface SocialIconProps extends IconProps {
   name: SocialIconName | string;
