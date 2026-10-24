@@ -189,45 +189,85 @@ export const platformsCatalog: IntegrationPlatform[] = [
     defaultThroughput: "92 messages today",
     mcpTools: [
       {
+        name: "slack_list_channels",
+        title: "List Workspace Channels",
+        description: "Enumerate public and private Slack channels with member counts and topic details via conversations.list.",
+        category: "read",
+        parameters: [
+          { name: "types", type: "string", description: "Channel types to include (e.g. public_channel,private_channel)", required: false, default: "public_channel,private_channel" },
+          { name: "limit", type: "number", description: "Maximum number of channels to return", required: false, default: 100 },
+        ],
+        sampleOutput: {
+          channels: [
+            { id: "C01A2B3C4D", name: "executive-briefs", is_private: false, num_members: 14, topic: "Daily AI summaries and executive decisions" },
+            { id: "C05E6F7G8H", name: "general", is_private: false, num_members: 48, topic: "Company-wide announcements and team updates" },
+            { id: "C09I0J1K2L", name: "engineering", is_private: true, num_members: 22, topic: "Product engineering and deployment alerts" },
+          ],
+        },
+      },
+      {
+        name: "slack_get_channel_history",
+        title: "Get Channel History",
+        description: "Retrieve recent conversation messages, mentions, and documents from a designated channel via conversations.history.",
+        category: "read",
+        parameters: [
+          { name: "channel", type: "string", description: "Slack Channel ID (e.g. C01A2B3C4D)", required: true },
+          { name: "limit", type: "number", description: "Number of recent messages to fetch", required: false, default: 20 },
+        ],
+        sampleOutput: {
+          messages: [
+            { ts: "1729749100.001", user: "U0123456", text: "Q3 ARR growth has crossed 142% milestone.", reply_count: 3 },
+            { ts: "1729749250.002", user: "U0654321", text: "Briefing approved. Scheduling investor update call." },
+          ],
+        },
+      },
+      {
         name: "slack_post_message",
-        title: "Post Message to Channel or DM",
-        description: "Send executive briefing cards, action items, or direct messages to Slack channels.",
+        title: "Post Message to Channel",
+        description: "Send AI executive briefings, status alerts, or direct updates to designated Slack channels via chat.postMessage.",
         category: "write",
         parameters: [
-          { name: "channel", type: "string", description: "Channel ID or #channel name", required: true },
-          { name: "text", type: "string", description: "Message content or mrkdwn block", required: true },
+          { name: "channel", type: "string", description: "Target Channel ID (e.g. C01A2B3C4D) or #channel-name", required: true },
+          { name: "text", type: "string", description: "Message body text with Slack mrkdwn formatting", required: true },
         ],
+        sampleOutput: {
+          ok: true,
+          channel: "C01A2B3C4D",
+          ts: "1729750000.001",
+          message: { text: "Executive briefing dispatched successfully." },
+        },
       },
       {
-        name: "slack_read_channel_history",
-        title: "Read Channel Messages",
-        description: "Retrieve recent conversations, mentions, and shared documents from designated channels.",
-        category: "read",
-        parameters: [
-          { name: "channel", type: "string", description: "Channel ID", required: true },
-          { name: "limit", type: "number", description: "Number of messages to ingest", required: false, default: 20 },
-        ],
-      },
-      {
-        name: "slack_get_thread_replies",
-        title: "Summarize Thread Replies",
-        description: "Fetch all replies to a specific parent message to synthesize decisions and consensus.",
-        category: "read",
-        parameters: [
-          { name: "channel", type: "string", description: "Channel ID", required: true },
-          { name: "thread_ts", type: "string", description: "Timestamp of parent message", required: true },
-        ],
-      },
-      {
-        name: "slack_add_reaction",
-        title: "React to Message",
-        description: "Acknowledge message or decision with emoji reactions (e.g. eyes, white_check_mark).",
+        name: "slack_reply_thread",
+        title: "Reply to Message Thread",
+        description: "Publish a threaded reply to a parent Slack message timestamp to synthesize decisions and resolve action items.",
         category: "write",
         parameters: [
-          { name: "channel", type: "string", description: "Channel ID", required: true },
-          { name: "timestamp", type: "string", description: "Message timestamp", required: true },
-          { name: "name", type: "string", description: "Emoji name without colons", required: true },
+          { name: "channel", type: "string", description: "Channel ID containing the parent message", required: true },
+          { name: "thread_ts", type: "string", description: "Timestamp of parent message (e.g. 1729749100.001)", required: true },
+          { name: "text", type: "string", description: "Thread reply text content", required: true },
         ],
+        sampleOutput: {
+          ok: true,
+          channel: "C01A2B3C4D",
+          ts: "1729750100.002",
+          thread_ts: "1729749100.001",
+        },
+      },
+      {
+        name: "slack_list_users",
+        title: "List Workspace Users",
+        description: "Fetch workspace directory of team members, bot agents, and profile details via users.list.",
+        category: "read",
+        parameters: [
+          { name: "limit", type: "number", description: "Maximum number of team members to retrieve", required: false, default: 50 },
+        ],
+        sampleOutput: {
+          members: [
+            { id: "U0123456", name: "sushantk", real_name: "Sushant Kate", is_admin: true, is_bot: false },
+            { id: "B04A92K1L", name: "toybox_bot", real_name: "ToyBox AI Assistant", is_bot: true },
+          ],
+        },
       },
     ],
   },

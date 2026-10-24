@@ -25,6 +25,13 @@ export function DashboardShell() {
     tabFromUrl || "dashboard"
   );
 
+  // Synchronize activeTab whenever tab query parameter changes
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl, activeTab]);
+
   // Sidebar collapsible state
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);

@@ -112,6 +112,16 @@ export async function GET(request: NextRequest) {
           isConnected = false;
           accountEmail = null;
         }
+      } else if (platform.id === "slack") {
+        if (isConnected) {
+          accountEmail =
+            saved?.metadata?.workspace_name ||
+            saved?.metadata?.team_name ||
+            saved?.credentials?.team_name ||
+            "Enterprise Workspace";
+        } else {
+          accountEmail = null;
+        }
       }
 
       return {
@@ -133,6 +143,7 @@ export async function GET(request: NextRequest) {
           auto_scheduling: true,
         },
         metadata: saved?.metadata || null,
+        credentials: saved?.credentials || null,
         hasCustomCredentials: !!(saved?.credentials && Object.keys(saved.credentials).length > 0) || (platform.id === "whatsapp" && isConnected),
         mcpToolsCount: platform.mcpTools.length,
       };
@@ -173,7 +184,7 @@ export async function POST(request: NextRequest) {
     const newStatus = status === "connected" ? "connected" : "disconnected";
     const now = new Date().toISOString();
 
-    const isMcpOAuth = platformId === "gmail" || platformId === "gcal";
+    const isMcpOAuth = platformId === "gmail" || platformId === "gcal" || platformId === "slack";
 
     const payload = {
       user_id: userId,

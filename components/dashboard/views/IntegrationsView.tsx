@@ -21,6 +21,7 @@ import { IntegrationSettingsModal } from "@/components/dashboard/integrations/In
 import { WhatsAppConnectionModal } from "@/components/dashboard/integrations/WhatsAppConnectionModal";
 import { WhatsAppSettingsModal } from "@/components/dashboard/integrations/WhatsAppSettingsModal";
 import { GoogleCalendarSettingsModal } from "@/components/dashboard/integrations/GoogleCalendarSettingsModal";
+import { SlackSettingsModal } from "@/components/dashboard/integrations/SlackSettingsModal";
 
 export interface IntegrationItem {
   id: string;
@@ -41,6 +42,7 @@ export interface IntegrationItem {
     auto_scheduling: boolean;
   };
   metadata?: any;
+  credentials?: any;
   hasCustomCredentials?: boolean;
 }
 
@@ -157,6 +159,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
   const [whatsAppConnectionOpen, setWhatsAppConnectionOpen] = useState(false);
   const [whatsAppSettingsOpen, setWhatsAppSettingsOpen] = useState(false);
   const [googleCalendarSettingsOpen, setGoogleCalendarSettingsOpen] = useState(false);
+  const [slackSettingsOpen, setSlackSettingsOpen] = useState(false);
 
   // Initialize state with clean disconnected platforms
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(createDefaultIntegrations);
@@ -261,14 +264,41 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         newUrl.searchParams.delete("email");
         window.history.replaceState({}, "", newUrl.toString());
       }
+    } else if (
+      (searchParams.get("status") === "connected" && searchParams.get("platform") === "slack") ||
+      connectedParam === "slack" ||
+      searchParams.get("platform") === "slack"
+    ) {
+      const workspace = searchParams.get("workspace") || "Slack Workspace";
+      setOauthStatus({
+        type: "success",
+        message: `Slack Enterprise (${workspace}) successfully connected via MCP!`,
+        email: workspace,
+      });
+      setToast({
+        id: `toast-${Date.now()}`,
+        title: "Slack Enterprise Connected",
+        message: `Successfully connected to Slack workspace "${workspace}"!`,
+        email: workspace,
+      });
+      fetchDatabaseIntegrations();
+      if (typeof window !== "undefined") {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("status");
+        newUrl.searchParams.delete("platform");
+        newUrl.searchParams.delete("workspace");
+        newUrl.searchParams.delete("connected");
+        window.history.replaceState({}, "", newUrl.toString());
+      }
     } else if (errorParam) {
       setOauthStatus({
         type: "error",
-        message: `Google OAuth connection could not be completed: ${errorParam}`,
+        message: `OAuth connection could not be completed: ${errorParam}`,
       });
       if (typeof window !== "undefined") {
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.delete("error");
+        newUrl.searchParams.delete("platform");
         window.history.replaceState({}, "", newUrl.toString());
       }
     }
@@ -349,6 +379,34 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
       }
       return;
     }
+    if (platformId === "slack") {
+      setConnectingId("slack");
+      try {
+        const res = await fetch("/api/integrations/slack/connect?format=json");
+        const data = await res.json();
+
+        if (!res.ok || !data.url) {
+          setOauthStatus({
+            type: "error",
+            message:
+              data.error ||
+              "Please configure SLACK_CLIENT_ID and SLACK_CLIENT_SECRET in your .env file to connect Slack Enterprise.",
+          });
+          setConnectingId(null);
+          return;
+        }
+
+        // Navigate to Slack OAuth 2.0 authorize URL
+        window.location.href = data.url;
+      } catch (err: any) {
+        setOauthStatus({
+          type: "error",
+          message: err.message || "Failed to initiate Slack Enterprise connection.",
+        });
+        setConnectingId(null);
+      }
+      return;
+    }
     toggleConnect(platformId);
   };
 
@@ -410,6 +468,22 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
             action: nextStatus === "connected" ? "verify" : "disconnect",
           }),
         });
+      } else if (id === "slack") {
+        if (nextStatus === "disconnected") {
+          await fetch("/api/integrations/slack/disconnect", {
+            method: "POST",
+            headers,
+          });
+        } else {
+          await fetch("/api/integrations", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              platformId: "slack",
+              status: "connected",
+            }),
+          });
+        }
       } else {
         await fetch("/api/integrations", {
           method: "POST",
@@ -451,6 +525,10 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
     }
     if (platformId === "gcal") {
       setGoogleCalendarSettingsOpen(true);
+      return;
+    }
+    if (platformId === "slack") {
+      setSlackSettingsOpen(true);
       return;
     }
     const platformDef = getPlatformById(platformId);
@@ -853,7 +931,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                       <h3 className="font-[652] text-sm sm:text-base text-[var(--ink)] tracking-tight">
                         {item.name}
                       </h3>
-                      {(item.id === "gmail" || item.id === "whatsapp" || item.id === "gcal") && (
+                      {(item.id === "gmail" || item.id === "whatsapp" || item.id === "gcal" || item.id === "slack") && (
                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-[#0066FF]/10 text-[#0066FF] border border-[#0066FF]/20 font-[600]">
                           MCP Enabled
                         </span>
@@ -865,11 +943,33 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
                     <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed font-[300] min-h-[36px]">
                       {item.description}
                     </p>
+
+                    {/* Show Connected Workspace Name on Slack card */}
+                    {item.id === "slack" && isConnected && (item.metadata?.team_name || item.accountEmail) && (
+                      <div className="mt-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--field)] border border-[var(--hairline)] text-xs text-[var(--ink)] w-fit font-[500]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                        <span className="text-[var(--text-muted)] text-[10px]">Workspace:</span>
+                        <span className="font-[652] truncate max-w-[140px] text-[var(--ink)]">
+                          {item.metadata?.team_name || item.accountEmail}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Status and Statistics Footer */}
                 <div className="pt-3 border-t border-[var(--hairline)] space-y-2 text-xs">
+                  {isConnected && (item.metadata?.team_name || item.accountEmail) && (
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>{item.id === "slack" ? "Workspace:" : "Account:"}</span>
+                      <span
+                        className="font-[600] text-[var(--ink)] truncate max-w-[150px]"
+                        title={item.metadata?.team_name || item.accountEmail || ""}
+                      >
+                        {item.metadata?.team_name || item.accountEmail}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                     <span>Last Synced:</span>
                     <span className="font-[600] text-[var(--ink)]">{item.lastSync}</span>
@@ -990,6 +1090,26 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         lastSync={integrations.find((i) => i.id === "gcal")?.lastSync || "Just now"}
         tools={getPlatformById("gcal")?.mcpTools || []}
         initialPermissions={integrations.find((i) => i.id === "gcal")?.permissions}
+      />
+
+      {/* ─── Dedicated Slack Enterprise Settings & MCP Dialog ─── */}
+      <SlackSettingsModal
+        isOpen={slackSettingsOpen}
+        onClose={() => setSlackSettingsOpen(false)}
+        onDisconnect={() => toggleConnect("slack")}
+        workspaceName={
+          integrations.find((i) => i.id === "slack")?.metadata?.team_name ||
+          integrations.find((i) => i.id === "slack")?.metadata?.workspace_name ||
+          integrations.find((i) => i.id === "slack")?.accountEmail ||
+          "Enterprise Workspace"
+        }
+        botId={
+          integrations.find((i) => i.id === "slack")?.metadata?.bot_user_id ||
+          integrations.find((i) => i.id === "slack")?.credentials?.bot_user_id ||
+          "B04A92K1L"
+        }
+        lastSync={integrations.find((i) => i.id === "slack")?.lastSync || "Just now"}
+        tools={getPlatformById("slack")?.mcpTools || []}
       />
     </div>
   );
