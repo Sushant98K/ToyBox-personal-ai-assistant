@@ -104,6 +104,22 @@ export async function executeGenerateBriefingCore(
     throw new Error("Failed to persist generated briefing record in database.");
   }
 
+  // Update last_run_at on schedule if triggered from a schedule
+  if (scheduleId) {
+    try {
+      await insforgeAdmin
+        .database
+        .from("briefing_schedules")
+        .update({
+          last_run_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", scheduleId);
+    } catch (schedUpdErr) {
+      console.warn("[BriefingEngine] Warning updating schedule last_run_at:", schedUpdErr);
+    }
+  }
+
   // 5. Synchronize user_dashboard_cache
   try {
     const dashboardPriorityItems = synthesized.categorized_items.map((item, idx) => ({

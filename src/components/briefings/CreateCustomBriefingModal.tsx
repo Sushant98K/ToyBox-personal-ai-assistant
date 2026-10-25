@@ -8,7 +8,7 @@ import { BriefingCategory, BriefingSchedule } from "@/types/briefing";
 interface CreateCustomBriefingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onScheduleCreated: (schedule: BriefingSchedule) => void;
+  onScheduleCreated: (schedule: BriefingSchedule, initialBriefing?: any) => void;
   userId?: string;
 }
 
@@ -57,7 +57,9 @@ export function CreateCustomBriefingModal({
   const [scheduledTime, setScheduledTime] = useState("08:30");
   const [priorityThreshold, setPriorityThreshold] = useState<"all" | "high_only">("all");
   const [calendarScope, setCalendarScope] = useState<"7d" | "14d" | "month" | "quarter" | "year">("7d");
+  const [runImmediately, setRunImmediately] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   if (!isOpen) return null;
@@ -87,6 +89,7 @@ export function CreateCustomBriefingModal({
 
     setIsSubmitting(true);
     setErrorMsg("");
+    setStatusMessage("Saving schedule...");
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -125,12 +128,38 @@ export function CreateCustomBriefingModal({
       }
 
       const json = await res.json();
-      onScheduleCreated(json.schedule);
+      const createdSchedule = json.schedule;
+      let initialBriefing: any = null;
+
+      if (runImmediately && createdSchedule) {
+        setStatusMessage("Synthesizing first briefing with Gemini 3.5 Flash-Lite...");
+        try {
+          const trigRes = await fetch("/api/briefings/trigger", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              scheduleId: createdSchedule.id,
+              promptGoal: effectivePrompt,
+              platforms: selectedPlatforms,
+              priorityThreshold,
+            }),
+          });
+          if (trigRes.ok) {
+            const trigJson = await trigRes.json();
+            initialBriefing = trigJson.briefing;
+          }
+        } catch (trigErr) {
+          console.warn("Could not generate initial briefing immediately:", trigErr);
+        }
+      }
+
+      onScheduleCreated(createdSchedule, initialBriefing);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred.");
     } finally {
       setIsSubmitting(false);
+      setStatusMessage("");
     }
   };
 
@@ -371,8 +400,25 @@ export function CreateCustomBriefingModal({
             </div>
           )}
 
+          {/* Run Immediately Option */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[var(--canvas)] border border-[var(--hairline)]">
+            <input
+              type="checkbox"
+              id="runImmediately"
+              checked={runImmediately}
+              onChange={(e) => setRunImmediately(e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-[var(--hairline)] accent-[#0066FF] cursor-pointer shrink-0"
+            />
+            <label htmlFor="runImmediately" className="text-xs text-[var(--ink)] cursor-pointer select-none">
+              <span className="font-[600]">Generate initial briefing immediately</span>
+              <span className="text-[var(--text-muted)] block text-[11px] mt-0.5 font-[300]">
+                Synthesize a live briefing right now using your custom focus prompt, and keep it scheduled daily at {scheduledTime}.
+              </span>
+            </label>
+          </div>
+
           {/* Action Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--hairline)]">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--hairline)]">
             <button
               type="button"
               onClick={onClose}
@@ -384,12 +430,12 @@ export function CreateCustomBriefingModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-opacity text-xs font-[600] shadow-sm cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-opacity text-xs font-[600] shadow-sm cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
                   <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                  <span>Saving Schedule...</span>
+                  <span>{statusMessage || "Processing..."}</span>
                 </>
               ) : (
                 <>

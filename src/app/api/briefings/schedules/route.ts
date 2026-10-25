@@ -1,12 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSchedules, createSchedule } from "@/lib/briefings/briefing-repository";
+import { getSchedules, createSchedule, advanceScheduleNextRun } from "@/lib/briefings/briefing-repository";
 import { resolveUserId } from "@/lib/briefings/resolve-user";
+import { executeGenerateBriefingCore } from "@/trigger/briefings";
 
 // GET /api/briefings/schedules: Fetch schedules for current user
 export async function GET(request: NextRequest) {
   try {
     const userId = await resolveUserId(request);
     const schedules = await getSchedules(userId);
+
+    // Self-healing catchup: Evaluate any active schedules that became due
+    const now = new Date();
+    for (const s of schedules) {
+      if (s.is_active && s.next_run_at && new Date(s.next_run_at) <= now) {
+        // Trigger background execution without delaying HTTP response
+        (async () => {
+          try {
+            await executeGenerateBriefingCore({
+              scheduleId: s.id,
+              userId: s.user_id,
+              isManual: false,
+            });
+            await advanceScheduleNextRun(s.id, s.scheduled_time);
+          } catch (err) {
+            console.error(`[ScheduleCatchup] Error running overdue schedule ${s.id}:`, err);
+          }
+        })();
+      }
+    }
 
     return NextResponse.json({
       success: true,

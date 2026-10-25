@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   ChevronRight,
   Filter,
+  Play,
+  Zap,
 } from "lucide-react";
 import { SocialIcon } from "@/components/icons/AppIcons";
 import { CreateCustomBriefingModal } from "@/components/briefings/CreateCustomBriefingModal";
@@ -34,12 +36,15 @@ export default function BriefingsPage() {
   // State
   const [briefings, setBriefings] = useState<GeneratedBriefing[]>([]);
   const [schedules, setSchedules] = useState<BriefingSchedule[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<"schedules" | "history">("schedules");
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [runningScheduleId, setRunningScheduleId] = useState<string | null>(null);
   const [autoBriefingActive, setAutoBriefingActive] = useState(true);
   const [dateFilter, setDateFilter] = useState<"6h" | "today" | "week" | "all">("today");
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteScheduleConfirmId, setDeleteScheduleConfirmId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
 
   // Load user session and briefings data
@@ -160,6 +165,85 @@ export default function BriefingsPage() {
       }
     } catch (e) {
       console.error("Failed to delete briefing:", e);
+    }
+  };
+
+  // Run a specific custom schedule immediately on demand
+  const handleRunScheduleNow = async (schedule: BriefingSchedule) => {
+    setRunningScheduleId(schedule.id);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (userId) headers["x-user-id"] = userId;
+
+      const res = await fetch("/api/briefings/trigger", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          scheduleId: schedule.id,
+          promptGoal: schedule.prompt_goal || schedule.name,
+          platforms: schedule.platforms,
+          priorityThreshold: schedule.priority_threshold,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to generate briefing for schedule");
+      }
+
+      const json = await res.json();
+      if (json.briefing) {
+        setBriefings((prev) => [json.briefing, ...prev.filter((b) => b.id !== json.briefing.id)]);
+        setSchedules((prev) =>
+          prev.map((s) => (s.id === schedule.id ? { ...s, last_run_at: new Date().toISOString() } : s))
+        );
+      }
+    } catch (err: any) {
+      console.error("Error executing schedule:", err);
+      alert(err.message || "Failed to trigger briefing for schedule.");
+    } finally {
+      setRunningScheduleId(null);
+    }
+  };
+
+  // Toggle active status for individual schedule
+  const handleToggleSchedule = async (schedule: BriefingSchedule) => {
+    const nextState = !schedule.is_active;
+    setSchedules((prev) =>
+      prev.map((s) => (s.id === schedule.id ? { ...s, is_active: nextState } : s))
+    );
+
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (userId) headers["x-user-id"] = userId;
+
+      await fetch(`/api/briefings/schedules/${schedule.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ is_active: nextState }),
+      });
+    } catch (err) {
+      console.error("Error updating schedule status:", err);
+    }
+  };
+
+  // Delete a configured schedule
+  const handleDeleteSchedule = async (id: string) => {
+    try {
+      const headers: Record<string, string> = {};
+      if (userId) headers["x-user-id"] = userId;
+
+      const res = await fetch(`/api/briefings/schedules/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+
+      if (res.ok) {
+        setSchedules((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      console.error("Error deleting schedule:", err);
+    } finally {
+      setDeleteScheduleConfirmId(null);
     }
   };
 
@@ -499,64 +583,123 @@ export default function BriefingsPage() {
         </div>
       </div>
 
-      {/* ─── D. Past & Custom Briefings Table ─── */}
+      {/* ─── D. Configured Schedules & Past Briefings ─── */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base sm:text-lg font-[652] text-[var(--ink)] tracking-tight">
-            Historical & Scheduled Briefings ({filteredBriefings.length})
-          </h2>
-          <span className="text-xs text-[var(--text-muted)]">
-            Persisted in PostgreSQL database with instant recall
-          </span>
+        {/* Navigation Tabs Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--hairline)]">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveSubTab("schedules")}
+              className={`px-4 py-2 rounded-full text-xs font-[600] transition-all cursor-pointer flex items-center gap-2 ${
+                activeSubTab === "schedules"
+                  ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
+                  : "bg-[var(--canvas-soft)] text-[var(--text-muted)] hover:text-[var(--ink)] border border-[var(--hairline-soft)]"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Configured Schedules ({schedules.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveSubTab("history")}
+              className={`px-4 py-2 rounded-full text-xs font-[600] transition-all cursor-pointer flex items-center gap-2 ${
+                activeSubTab === "history"
+                  ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-xs"
+                  : "bg-[var(--canvas-soft)] text-[var(--text-muted)] hover:text-[var(--ink)] border border-[var(--hairline-soft)]"
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Execution History ({filteredBriefings.length})</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCustomModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[var(--field)] hover:bg-[var(--raised)] border border-[var(--hairline)] text-[var(--ink)] font-[600] text-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Schedule</span>
+            </button>
+          </div>
         </div>
 
-        {filteredBriefings.length === 0 ? (
-          <div className="p-8 text-center rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs text-[var(--text-muted)]">
-            No briefings found matching the selected date filter.
-          </div>
-        ) : (
-          <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--canvas)] border-b border-[var(--hairline)] text-[var(--text-muted)] font-[600] uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="px-5 py-3">Briefing Name</th>
-                    <th className="px-5 py-3">Date & Time</th>
-                    <th className="px-5 py-3">Platforms</th>
-                    <th className="px-5 py-3">Items</th>
-                    <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--hairline-soft)]">
-                  {filteredBriefings.map((b) => {
-                    const isLatest = latestBriefing?.id === b.id;
-                    return (
-                      <tr
-                        key={b.id}
-                        className="hover:bg-[var(--canvas)]/60 transition-colors group"
-                      >
-                        <td className="px-5 py-4 font-[600] text-[var(--ink)]">
-                          <Link
-                            href={`/briefings/${b.id}`}
-                            className="hover:text-[#0066FF] transition-colors flex items-center gap-2"
+        {/* ─── TAB 1: Configured Intelligence Schedules ─── */}
+        {activeSubTab === "schedules" && (
+          <div className="space-y-4">
+            {schedules.length === 0 ? (
+              <div className="p-10 text-center rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs text-[var(--text-muted)] space-y-3">
+                <Clock className="w-8 h-8 mx-auto text-[var(--text-faint)]" />
+                <p className="font-[500]">No custom intelligence schedules configured yet.</p>
+                <p className="text-[11px] text-[var(--text-faint)] max-w-sm mx-auto font-[300]">
+                  Create custom briefings tailored to specific platforms, prompts, and recurring schedules.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomModalOpen(true)}
+                  className="px-4 py-2 rounded-full bg-[var(--primary)] text-[var(--on-primary)] font-[600] text-xs hover:opacity-90 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Custom Schedule</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {schedules.map((s) => {
+                  const isRunning = runningScheduleId === s.id;
+                  return (
+                    <div
+                      key={s.id}
+                      className="rounded-[22px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-5 flex flex-col justify-between space-y-4 hover:border-[var(--hairline)] transition-all group shadow-xs"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="font-[652] text-sm text-[var(--ink)] tracking-tight">
+                              {s.name}
+                            </h3>
+                            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--text-muted)] mt-1">
+                              <Clock className="w-3 h-3 text-[var(--text-faint)]" />
+                              <span>Daily at {s.scheduled_time}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSchedule(s)}
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-[600] border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              s.is_active
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                : "bg-[var(--canvas)] text-[var(--text-muted)] border-[var(--hairline)]"
+                            }`}
+                            title={s.is_active ? "Click to Pause" : "Click to Activate"}
                           >
-                            <span>{b.title}</span>
-                            {isLatest && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#0066FF] text-white">
-                                Latest
-                              </span>
-                            )}
-                          </Link>
-                        </td>
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                s.is_active ? "bg-emerald-500 animate-pulse" : "bg-[var(--text-faint)]"
+                              }`}
+                            />
+                            <span>{s.is_active ? "Active" : "Paused"}</span>
+                          </button>
+                        </div>
 
-                        <td className="px-5 py-4 text-[var(--text-muted)] font-mono text-[11px]">
-                          {formatHumanDateTime(b.created_at || b.date)}
-                        </td>
+                        {s.prompt_goal && (
+                          <div className="p-3 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] space-y-1">
+                            <span className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] font-[600] block">
+                              Focus Prompt
+                            </span>
+                            <p className="text-xs text-[var(--ink)] font-[300] line-clamp-2 leading-relaxed">
+                              {s.prompt_goal}
+                            </p>
+                          </div>
+                        )}
 
-                        <td className="px-5 py-4">
+                        <div className="flex items-center justify-between pt-1">
                           <div className="flex items-center gap-1.5">
-                            {b.platforms_used.map((plat) => (
+                            {(s.platforms || []).map((plat) => (
                               <div
                                 key={plat}
                                 className="w-6 h-6 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-1 shrink-0"
@@ -567,57 +710,170 @@ export default function BriefingsPage() {
                               </div>
                             ))}
                           </div>
-                        </td>
 
-                        <td className="px-5 py-4 text-[var(--text-muted)]">
-                          <span className="font-[600] text-[var(--ink)]">
-                            {deduplicateBriefingItems(b.categorized_items || [], {
-                              referenceDate: b.created_at || b.date,
-                              calendarHorizonDays: detectCalendarHorizon(`${b.title} ${b.executive_summary}`, 7),
-                              contextText: `${b.title} ${b.executive_summary}`,
-                            }).length}
-                          </span>{" "}
-                          items
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-[600]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Completed
+                          <span className="text-[10px] text-[var(--text-faint)] font-mono">
+                            {s.priority_threshold === "high_only" ? "High/Urgent" : "All Priorities"}
                           </span>
-                        </td>
+                        </div>
+                      </div>
 
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              href={`/briefings/${b.id}`}
-                              className="px-3 py-1 rounded-full bg-[var(--canvas)] hover:bg-[var(--field)] border border-[var(--hairline)] text-[var(--ink)] font-[600] text-[11px] transition-all inline-flex items-center gap-1"
-                            >
-                              <span>View</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </Link>
+                      <div className="pt-3 border-t border-[var(--hairline-soft)] flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                          {s.last_run_at ? `Ran ${formatHumanDateTime(s.last_run_at)}` : "Pending first run"}
+                        </span>
 
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirmId(b.id)}
-                              className="p-1 rounded-full text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                              title="Delete briefing"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleRunScheduleNow(s)}
+                            disabled={isRunning}
+                            className="px-3.5 py-1.5 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 font-[600] text-[11px] transition-all inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                            title="Synthesize briefing for this schedule immediately"
+                          >
+                            {isRunning ? (
+                              <>
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>Synthesizing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>Run Now</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeleteScheduleConfirmId(s.id)}
+                            className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Delete Schedule"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── TAB 2: Generated Execution History Table ─── */}
+        {activeSubTab === "history" && (
+          <div className="space-y-4">
+            {filteredBriefings.length === 0 ? (
+              <div className="p-8 text-center rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs text-[var(--text-muted)]">
+                No briefings found matching the selected date filter.
+              </div>
+            ) : (
+              <div className="rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[var(--canvas)] border-b border-[var(--hairline)] text-[var(--text-muted)] font-[600] uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="px-5 py-3">Briefing Title</th>
+                        <th className="px-5 py-3">Generated At</th>
+                        <th className="px-5 py-3">Platforms</th>
+                        <th className="px-5 py-3">Signals Analyzed</th>
+                        <th className="px-5 py-3">Status</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--hairline-soft)]">
+                      {filteredBriefings.map((b) => {
+                        const isLatest = latestBriefing?.id === b.id;
+                        return (
+                          <tr
+                            key={b.id}
+                            className="hover:bg-[var(--canvas)]/60 transition-colors group"
+                          >
+                            <td className="px-5 py-4 font-[600] text-[var(--ink)]">
+                              <Link
+                                href={`/briefings/${b.id}`}
+                                className="hover:text-[#0066FF] transition-colors flex items-center gap-2"
+                              >
+                                <span>{b.title}</span>
+                                {isLatest && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#0066FF] text-white">
+                                    Latest
+                                  </span>
+                                )}
+                              </Link>
+                            </td>
+
+                            <td className="px-5 py-4 text-[var(--text-muted)] font-mono text-[11px]">
+                              {formatHumanDateTime(b.created_at || b.date)}
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-1.5">
+                                {b.platforms_used.map((plat) => (
+                                  <div
+                                    key={plat}
+                                    className="w-6 h-6 flex items-center justify-center bg-[var(--canvas)] border border-[var(--hairline)] p-1 shrink-0"
+                                    style={{ borderRadius: "30%" }}
+                                    title={plat}
+                                  >
+                                    <SocialIcon name={plat} size={14} className="w-3.5 h-3.5 object-contain" />
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4 text-[var(--text-muted)]">
+                              <span className="font-[600] text-[var(--ink)]">
+                                {deduplicateBriefingItems(b.categorized_items || [], {
+                                  referenceDate: b.created_at || b.date,
+                                  calendarHorizonDays: detectCalendarHorizon(`${b.title} ${b.executive_summary}`, 7),
+                                  contextText: `${b.title} ${b.executive_summary}`,
+                                }).length}
+                              </span>{" "}
+                              items
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-[600]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Completed
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Link
+                                  href={`/briefings/${b.id}`}
+                                  className="px-3 py-1 rounded-full bg-[var(--canvas)] hover:bg-[var(--field)] border border-[var(--hairline)] text-[var(--ink)] font-[600] text-[11px] transition-all inline-flex items-center gap-1"
+                                >
+                                  <span>View</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </Link>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmId(b.id)}
+                                  className="p-1 rounded-full text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Delete briefing"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Briefing Confirmation Modal */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -628,9 +884,9 @@ export default function BriefingsPage() {
             <div className="w-10 h-10 mx-auto rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center">
               <Trash2 className="w-5 h-5" />
             </div>
-            <h3 className="font-[652] text-base text-[var(--ink)]">Delete Briefing?</h3>
+            <h3 className="font-[652] text-base text-[var(--ink)]">Delete Briefing Record?</h3>
             <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-              Are you sure you want to delete this briefing record? This action cannot be undone.
+              Are you sure you want to delete this historical briefing? This action cannot be undone.
             </p>
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
@@ -652,13 +908,52 @@ export default function BriefingsPage() {
         </div>
       )}
 
+      {/* Delete Schedule Confirmation Modal */}
+      {deleteScheduleConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setDeleteScheduleConfirmId(null)}
+          />
+          <div className="relative w-full max-w-sm rounded-[24px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-6 space-y-4 shadow-xl text-center">
+            <div className="w-10 h-10 mx-auto rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="font-[652] text-base text-[var(--ink)]">Delete Automated Schedule?</h3>
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+              Are you sure you want to remove this recurring schedule? It will no longer automatically synthesize briefings.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteScheduleConfirmId(null)}
+                className="px-4 py-1.5 rounded-full text-xs font-[600] text-[var(--text-muted)] hover:text-[var(--ink)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteSchedule(deleteScheduleConfirmId)}
+                className="px-4 py-1.5 rounded-full text-xs font-[600] bg-rose-500 text-white hover:bg-rose-600"
+              >
+                Delete Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Custom Briefing Creation Modal */}
       <CreateCustomBriefingModal
         isOpen={isCustomModalOpen}
         onClose={() => setIsCustomModalOpen(false)}
         userId={userId}
-        onScheduleCreated={(newSchedule) => {
-          setSchedules((prev) => [newSchedule, ...prev]);
+        onScheduleCreated={(newSchedule, initialBriefing) => {
+          setSchedules((prev) => [newSchedule, ...prev.filter((s) => s.id !== newSchedule.id)]);
+          if (initialBriefing) {
+            setBriefings((prev) => [initialBriefing, ...prev.filter((b) => b.id !== initialBriefing.id)]);
+          }
+          setActiveSubTab("schedules");
         }}
       />
     </div>
