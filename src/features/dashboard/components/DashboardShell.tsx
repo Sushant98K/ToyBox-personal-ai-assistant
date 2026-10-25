@@ -112,6 +112,10 @@ export function DashboardShell() {
 
   // Update URL and tab state
   const handleTabChange = (tab: DashboardTab) => {
+    if (tab === "briefing") {
+      router.push("/briefings");
+      return;
+    }
     setActiveTab(tab);
     setMobileSidebarOpen(false);
     const params = new URLSearchParams(window.location.search);
