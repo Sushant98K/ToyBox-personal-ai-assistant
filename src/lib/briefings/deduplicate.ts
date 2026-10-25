@@ -117,8 +117,26 @@ export function deduplicateBriefingItems(
         }
       }
 
+      const isBirthdayOrAnnual = /\b(bday|birthday|anniversary)\b/i.test(cleanTitle);
+
+      // Keep recurring annual reminders like birthdays quiet unless within immediate 7 days for general briefings
+      if (isBirthdayOrAnnual && fallbackHorizon <= 14) {
+        const birthdayHorizonMs = 7 * 24 * 60 * 60 * 1000;
+        if (item.timestamp) {
+          const eventTime = new Date(item.timestamp).getTime();
+          if (!isNaN(eventTime) && eventTime > refTime + birthdayHorizonMs) {
+            continue; // Quiet distant birthday reminder
+          }
+        }
+      }
+
       const recurringId = item.metadata?.recurringEventId;
-      const calKey = recurringId ? `rec_${recurringId}` : `cal_${cleanTitle}`;
+      const normalizedBirthdayTitle = cleanTitle.replace(/\b(20\d\d|upcoming)\b/g, "").replace(/\s+/g, " ").trim();
+      const calKey = recurringId
+        ? `rec_${recurringId}`
+        : isBirthdayOrAnnual
+        ? `bday_${normalizedBirthdayTitle}`
+        : `cal_${cleanTitle}`;
 
       if (calEventMap.has(calKey)) {
         const existingIdx = calEventMap.get(calKey)!;

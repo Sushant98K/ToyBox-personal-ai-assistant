@@ -145,15 +145,25 @@ export async function GET(request: NextRequest) {
           .maybeSingle();
 
         if (!cacheErr && cacheRow && cacheRow.brief_data) {
-          const platforms = await getConnectedPlatformsSummary(userId);
-          return NextResponse.json({
-            success: true,
-            cached: true,
-            updated_at: cacheRow.updated_at,
-            expires_at: cacheRow.expires_at,
-            brief_data: cacheRow.brief_data as DashboardBriefData,
-            platforms,
-          });
+          const cachedPriorityItems = (cacheRow.brief_data as DashboardBriefData).priority_items || [];
+          const hasDistantFutureItems = cachedPriorityItems.some((item) =>
+            /\b202[7-9]\b|\b20[3-9]\d\b/.test(item.time || "") ||
+            /\b202[7-9]\b|\b20[3-9]\d\b/.test(item.title || "") ||
+            /\b202[7-9]\b|\b20[3-9]\d\b/.test(item.context || "")
+          );
+
+          if (!hasDistantFutureItems) {
+            const platforms = await getConnectedPlatformsSummary(userId);
+            return NextResponse.json({
+              success: true,
+              cached: true,
+              updated_at: cacheRow.updated_at,
+              expires_at: cacheRow.expires_at,
+              brief_data: cacheRow.brief_data as DashboardBriefData,
+              platforms,
+            });
+          }
+          // If cached data contains stale distant-future reminders (e.g. 2027/2028), bypass cache and re-synthesize cleanly
         }
       } catch (err) {
         console.warn("Error reading user_dashboard_cache, proceeding to fresh generation:", err);
@@ -190,7 +200,7 @@ ${JSON.stringify(liveContext.whatsapp, null, 2)}
 
 RULES FOR SYNTHESIS:
 1. Base all counts, bullets, and priority items ONLY on the actual data provided above. NEVER invent fake emails or fictitious contacts (like Sarah Jenkins, David Miller, or Acme Corp).
-2. If real calendar events exist (e.g. birthdays, upcoming meetings), highlight them accurately.
+2. For calendar events: Only include events occurring within the near-term upcoming horizon (next 7 to 14 days). DO NOT include distant future events (e.g. 2027 or 2028). For repeating annual reminders like birthdays or anniversaries, only mention them if they fall within the immediate upcoming window (next 7 days), and NEVER show repeated instances for future years. Keep distant recurring reminders quiet.
 3. If Gmail has an error (such as Gmail API needing to be enabled in Google Cloud Console project 682852845369), create a clear high-priority action advising the user to enable the Gmail API in their Google Cloud Console.
 4. If Slack is connected to workspace "ToyBox Dev Lab" with channels (#social, #all-toybox-dev-lab, #new-channel) but bot needs channel invitation, advise inviting the bot via "/invite @ToyBox AI Assistant".
 5. If WhatsApp is active with no new unread messages, confirm that the WhatsApp multi-device bridge is active and monitoring.
@@ -199,7 +209,7 @@ RULES FOR SYNTHESIS:
    - "priority_count": number of priority tasks / upcoming calendar items
    - "followup_count": number of follow-ups
    - "brief_bullets": exactly 3 or 4 high-impact, factually accurate bullet points
-   - "priority_items": array of 6 to 8 prioritized action items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
+   - "priority_items": array of 4 to 8 prioritized action items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
 
 Respond ONLY with valid JSON conforming to the schema without markdown blocks.`;
 
@@ -375,21 +385,59 @@ async function fetchIntegrationsContext(userId: string) {
   const gcalToken = await getValidGoogleToken("gcal", userId);
   if (gcalToken) {
     try {
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const horizonDays = 14; // Strictly limit dashboard calendar scope to next 14 days
+      const endOfHorizon = new Date(now.getTime() + horizonDays * 24 * 60 * 60 * 1000).toISOString();
+
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
           nowIso
-        )}&maxResults=5&singleEvents=true&orderBy=startTime`,
+        )}&timeMax=${encodeURIComponent(
+          endOfHorizon
+        )}&maxResults=10&singleEvents=true&orderBy=startTime`,
         { headers: { Authorization: `Bearer ${gcalToken}` } }
       );
       if (res.ok) {
         const data = await res.json();
         if (data.items && Array.isArray(data.items)) {
-          calendarData.events = data.items.map((item: { summary?: string; start?: { dateTime?: string; date?: string }; attendees?: Array<{ email: string }> }) => ({
-            summary: item.summary || "Scheduled Event",
-            start: item.start?.dateTime ? new Date(item.start.dateTime).toLocaleDateString() : (item.start?.date || "Upcoming"),
-            attendees: (item.attendees || []).map((a) => a.email).join(", "),
-          }));
+          const seenEventKeys = new Set<string>();
+          const validEvents: Array<{ summary: string; start: string; attendees?: string }> = [];
+
+          for (const item of data.items) {
+            const summary = (item.summary || "Scheduled Event").trim();
+
+            // Deduplicate repeating reminders / recurring events (e.g. annual birthdays)
+            const normalizedKey = summary
+              .toLowerCase()
+              .replace(/\b(20\d\d|upcoming)\b/g, "")
+              .replace(/[^a-z0-9]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+
+            const eventKey = item.recurringEventId || normalizedKey;
+            if (seenEventKeys.has(eventKey)) {
+              continue;
+            }
+            seenEventKeys.add(eventKey);
+
+            // Double check: strictly exclude anything beyond horizon window or from distant future years
+            const startRaw = item.start?.dateTime || item.start?.date || "";
+            if (startRaw) {
+              const eventDate = new Date(startRaw);
+              if (!isNaN(eventDate.getTime()) && eventDate.getTime() > now.getTime() + horizonDays * 24 * 60 * 60 * 1000) {
+                continue;
+              }
+            }
+
+            validEvents.push({
+              summary,
+              start: item.start?.dateTime ? new Date(item.start.dateTime).toLocaleDateString() : (item.start?.date || "Upcoming"),
+              attendees: (item.attendees || []).map((a: { email?: string; displayName?: string }) => a.email || a.displayName || "").filter(Boolean).join(", "),
+            });
+          }
+
+          calendarData.events = validEvents;
         }
       }
     } catch (e) {
@@ -515,10 +563,10 @@ function buildDynamicRealBullets(context: Awaited<ReturnType<typeof fetchIntegra
   if (context.calendar.events.length > 0) {
     const firstEvt = context.calendar.events[0];
     bullets.push(
-      `Google Calendar: Upcoming event "${firstEvt.summary}" on ${firstEvt.start}. ${context.calendar.events.length} total upcoming events synced.`
+      `Google Calendar: Upcoming event "${firstEvt.summary}" on ${firstEvt.start}. ${context.calendar.events.length} upcoming event(s) in the next 14 days.`
     );
   } else {
-    bullets.push("Google Calendar: Connected to sushant98k@gmail.com with zero hard conflicts for today.");
+    bullets.push("Google Calendar: Connected to sushant98k@gmail.com with 0 scheduled meetings or conflicts in the next 14 days.");
   }
 
   // Gmail

@@ -616,8 +616,44 @@ export function DashboardOverviewView({
 
           const rawItems = data?.priority_items || [];
           
+          // Defensive filter: quiet distant future items (e.g. 2027, 2028) & deduplicate repeating birthdays
+          const seenBirthdayKeys = new Set<string>();
+          const sanitizedItems = rawItems.filter((item) => {
+            const timeStr = item.time || "";
+            const titleStr = item.title || "";
+            const contextStr = item.context || "";
+
+            // Silence distant future reminders (e.g. 2027, 2028)
+            if (
+              /\b202[7-9]\b|\b20[3-9]\d\b/.test(timeStr) ||
+              /\b202[7-9]\b|\b20[3-9]\d\b/.test(titleStr) ||
+              /\b202[7-9]\b|\b20[3-9]\d\b/.test(contextStr)
+            ) {
+              return false;
+            }
+
+            // Deduplicate repeating birthday / anniversary reminders
+            const isBirthday =
+              /\b(bday|birthday|anniversary)\b/i.test(titleStr) ||
+              /\b(bday|birthday|anniversary)\b/i.test(contextStr);
+
+            if (isBirthday) {
+              const baseKey = titleStr
+                .toLowerCase()
+                .replace(/\b(20\d\d|upcoming)\b/g, "")
+                .replace(/[^a-z0-9]/g, "")
+                .trim();
+              if (seenBirthdayKeys.has(baseKey)) {
+                return false;
+              }
+              seenBirthdayKeys.add(baseKey);
+            }
+
+            return true;
+          });
+
           // Sort with highest priority first (urgent -> high -> medium)
-          const sortedItems = [...rawItems].sort((a, b) => {
+          const sortedItems = [...sanitizedItems].sort((a, b) => {
             const rankA = PRIORITY_ORDER[a.priority] ?? 99;
             const rankB = PRIORITY_ORDER[b.priority] ?? 99;
             return rankA - rankB;
