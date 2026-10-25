@@ -42,13 +42,13 @@ export function WhatsAppSettingsModal({
   onClose,
   onDisconnect,
   onReconnect,
-  phoneNumber = "+91 9768368524",
+  phoneNumber = "",
   tools,
 }: WhatsAppSettingsModalProps) {
   const displayPhone =
     phoneNumber && phoneNumber !== "+1 555 123 4567" && phoneNumber.trim().length > 0
       ? phoneNumber
-      : "+91 9768368524";
+      : "Linked WhatsApp Account";
 
   const [selectedTool, setSelectedTool] = useState<McpToolDefinition | null>(
     tools[0] || null

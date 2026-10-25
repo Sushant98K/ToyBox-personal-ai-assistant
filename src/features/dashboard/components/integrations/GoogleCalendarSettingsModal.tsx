@@ -44,7 +44,7 @@ export function GoogleCalendarSettingsModal({
   isOpen,
   onClose,
   onDisconnect,
-  accountEmail = "sushant98k@gmail.com",
+  accountEmail = "",
   timezone = "Asia/Kolkata",
   lastSync = "Just now",
   tools,
@@ -227,7 +227,7 @@ export function GoogleCalendarSettingsModal({
                   Primary Account
                 </span>
                 <p className="text-xs font-[600] text-[var(--ink)] truncate" title={accountEmail || ""}>
-                  {accountEmail || "sushant98k@gmail.com"}
+                  {accountEmail || "Connected Google Account"}
                 </p>
               </div>
             </div>

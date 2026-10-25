@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       if (platform.id === "whatsapp") {
         if (liveWhatsApp?.status === "connected") {
           isConnected = true;
-          accountEmail = liveWhatsApp.phoneNumber || accountEmail || "+91 9768368524";
+          accountEmail = liveWhatsApp.phoneNumber || accountEmail || null;
           if (lastSync === "Never") {
             lastSync = "Just now";
           }
@@ -186,6 +186,15 @@ export async function POST(request: NextRequest) {
 
     const isMcpOAuth = platformId === "gmail" || platformId === "gcal" || platformId === "slack";
 
+    // Query user record for dynamic email
+    const { data: userRec } = await insforgeAdmin
+      .database
+      .from("users")
+      .select("email")
+      .eq("id", userId)
+      .maybeSingle();
+    const dynamicUserEmail = userRec?.email || "connected account";
+
     const payload = {
       user_id: userId,
       platform_id: platformId,
@@ -193,7 +202,7 @@ export async function POST(request: NextRequest) {
       status: newStatus,
       auth_type: isMcpOAuth ? "mcp_oauth" : "api_key",
       credentials: newStatus === "connected" ? (credentials || {}) : {},
-      metadata: metadata || (platformId === "gmail" ? { account_email: "sushant98k@gmail.com" } : platformId === "gcal" ? { account_email: "sushant98k@gmail.com", timezone: "Asia/Kolkata", permissions: { read_access: true, event_creation: true, auto_scheduling: true } } : {}),
+      metadata: metadata || (platformId === "gmail" ? { account_email: dynamicUserEmail } : platformId === "gcal" ? { account_email: dynamicUserEmail, timezone: "UTC", permissions: { read_access: true, event_creation: true, auto_scheduling: true } } : {}),
       last_synced_at: newStatus === "connected" ? now : null,
       sync_frequency: syncFrequency || platform?.defaultSyncFrequency || "Real-time Webhook",
       messages_processed: messagesProcessed || (newStatus === "connected" ? "Active" : "0 items"),

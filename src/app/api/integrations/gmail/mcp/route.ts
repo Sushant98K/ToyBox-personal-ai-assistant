@@ -737,16 +737,29 @@ async function executeGmailMcpTool(
     }
 
     case "gmail_get_user_profile": {
+      let resolvedEmail = "user@example.com";
+      try {
+        const { data: userRec } = await insforgeAdmin
+          .database
+          .from("users")
+          .select("email")
+          .eq("id", userId)
+          .maybeSingle();
+        if (userRec?.email) resolvedEmail = userRec.email;
+      } catch {
+        // fallback
+      }
+
       return {
         mcpOutput: {
           content: [
             {
               type: "text",
-              text: "[MCP Sandbox] Profile: sushant98k@gmail.com (Connect real Google account to fetch live metrics).",
+              text: `[MCP Sandbox] Profile: ${resolvedEmail} (Connect real Google account to fetch live metrics).`,
             },
             {
               type: "json",
-              emailAddress: "sushant98k@gmail.com",
+              emailAddress: resolvedEmail,
               messagesTotal: 48920,
               threadsTotal: 14210,
               historyId: "1098234",

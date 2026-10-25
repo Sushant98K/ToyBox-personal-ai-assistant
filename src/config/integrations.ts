@@ -264,7 +264,7 @@ export const platformsCatalog: IntegrationPlatform[] = [
         ],
         sampleOutput: {
           members: [
-            { id: "U0123456", name: "sushantk", real_name: "Sushant Kate", is_admin: true, is_bot: false },
+            { id: "U0123456", name: "alex_lead", real_name: "Alex Morgan", is_admin: true, is_bot: false },
             { id: "B04A92K1L", name: "toybox_bot", real_name: "ToyBox AI Assistant", is_bot: true },
           ],
         },

@@ -206,6 +206,7 @@ export async function fetchConnectedData(
         } else {
           const errText = await listRes.text();
           if (errText.includes("has not been used in project") || listRes.status === 403) {
+            const connectedEmail = integrationMap.get("gmail")?.metadata?.account_email || "your email";
             normalizedItems.push({
               id: "gmail_enable_api",
               platform: "gmail",
@@ -214,7 +215,7 @@ export async function fetchConnectedData(
               sender: "Google Cloud Platform",
               timestamp: new Date().toISOString(),
               bodySnippet:
-                "OAuth connected for sushant98k@gmail.com. Gmail API needs activation in Google Cloud Console project to sync real emails.",
+                `OAuth connected for ${connectedEmail}. Gmail API needs activation in Google Cloud Console project to sync real emails.`,
               priorityScore: 95,
               urgency: "urgent",
               deepLinkOrId: "https://console.cloud.google.com/apis/library/gmail.googleapis.com",
@@ -312,7 +313,10 @@ export async function fetchConnectedData(
         slackRow?.credentials?.access_token ||
         process.env.SLACK_BOT_TOKEN;
 
-      const workspace = slackRow?.metadata?.team_name || "ToyBox Dev Lab";
+      const workspace =
+        (slackRow?.metadata?.team_name as string) ||
+        (slackRow?.metadata?.workspace_name as string) ||
+        "Connected Workspace";
 
       if (botToken) {
         const chanRes = await fetch(
@@ -402,7 +406,10 @@ export async function fetchConnectedData(
     activePlatforms.push("whatsapp");
     try {
       const waMessages = getWhatsAppMessages(userId);
-      const phoneNumber = liveWhatsApp?.phoneNumber || "+91 9768368524";
+      const phoneNumber =
+        liveWhatsApp?.phoneNumber ||
+        (integrationMap.get("whatsapp")?.metadata?.phone_number as string) ||
+        "Connected Device";
 
       if (waMessages && waMessages.length > 0) {
         waMessages.forEach((msg, idx) => {

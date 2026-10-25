@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
           live: false,
           result: {
             members: [
-              { id: "U0123456", name: "sushantk", real_name: "Sushant Kate", is_admin: true, is_bot: false },
+              { id: "U0123456", name: "alex_lead", real_name: "Alex Morgan", is_admin: true, is_bot: false },
               { id: "B09K82L41", name: "toybox_bot", real_name: "ToyBox AI Agent", is_admin: false, is_bot: true },
               { id: "U0654321", name: "sarahc", real_name: "Sarah Chen", is_admin: false, is_bot: false },
             ],

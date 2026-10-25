@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles,
   Play,
@@ -51,10 +51,127 @@ export function BriefingView({ currentUser, onNavigateTab }: BriefingViewProps) 
     "all" | "urgent" | "high" | "medium"
   >("all");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(45);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
 
   const currentUserId = currentUser?.id;
   const currentUserEmail = currentUser?.email;
+
+  // Clean up any ongoing speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Format seconds to mm:ss
+  const formatAudioTime = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const secs = Math.floor(sec % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Toggle audio playback using high-fidelity Web Speech API
+  const handleToggleAudio = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      alert("Speech synthesis is not supported in this browser.");
+      return;
+    }
+
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      setIsPlaying(false);
+      return;
+    }
+
+    // Build the executive spoken briefing text
+    const executiveName = currentUser?.name || currentUser?.email?.split("@")[0] || "Executive";
+    const filteredBullets = (data?.brief_bullets || []).filter(
+      (b) => !/monitoring active|is successfully active and monitoring|monitoring discussions across/i.test(b)
+    );
+    const bulletsText =
+      filteredBullets.length > 0
+        ? filteredBullets.join(". ")
+        : "All connected channels are running smoothly with no critical blockers.";
+
+    const urgentItems = (data?.priority_items || []).filter(
+      (i) => i.priority === "urgent" || i.priority === "high"
+    );
+
+    const actionText =
+      urgentItems.length > 0
+        ? `Key action items requiring your attention: ${urgentItems.map((i) => `${i.title}. ${i.context}`).join(". ")}`
+        : "You have no urgent decisions pending at this time.";
+
+    const fullScript = `Good day, ${executiveName}. Here is your executive intelligence briefing. ${bulletsText}. ${actionText}. Briefing complete.`;
+
+    // Estimate duration based on standard speech rate (~140 words per minute)
+    const wordCount = fullScript.split(/\s+/).length;
+    const estimatedDuration = Math.max(15, Math.round((wordCount / 140) * 60));
+    setDuration(estimatedDuration);
+    setCurrentTime(0);
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(fullScript);
+    utteranceRef.current = utterance;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+
+    // Pick a natural English voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice =
+      voices.find(
+        (v) =>
+          v.lang.startsWith("en") &&
+          (v.name.includes("Natural") ||
+            v.name.includes("Google") ||
+            v.name.includes("Samantha") ||
+            v.name.includes("Daniel") ||
+            v.name.includes("Karen"))
+      ) || voices.find((v) => v.lang.startsWith("en"));
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => {
+      setIsPlaying(true);
+      const startTime = Date.now();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+      timerIntervalRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setCurrentTime(elapsed);
+        if (elapsed >= estimatedDuration) {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        }
+      }, 250);
+    };
+
+    utterance.onend = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+
+    utterance.onerror = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }, [isPlaying, currentUser, data]);
 
   // Load synthesized briefing data from API
   useEffect(() => {
@@ -215,7 +332,7 @@ export function BriefingView({ currentUser, onNavigateTab }: BriefingViewProps) 
           <div className="p-3.5 rounded-2xl bg-[var(--canvas)] border border-[var(--hairline)] flex items-center gap-3.5 shrink-0 shadow-none">
             <button
               type="button"
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={handleToggleAudio}
               aria-label={isPlaying ? "Pause briefing audio" : "Play briefing audio"}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 transition-all shrink-0 focus:outline-none cursor-pointer"
             >
@@ -228,17 +345,19 @@ export function BriefingView({ currentUser, onNavigateTab }: BriefingViewProps) 
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-6 text-xs font-[600]">
                 <span className="text-[var(--ink)] flex items-center gap-1.5 text-[11px]">
-                  <Volume2 className="w-3.5 h-3.5 text-[#0066FF]" />
+                  <Volume2 className={cn("w-3.5 h-3.5 text-[#0066FF]", isPlaying && "animate-pulse")} />
                   <span>Voice Briefing (AI Host)</span>
                 </span>
                 <span className="text-[var(--text-muted)] font-mono text-[10px]">
-                  {isPlaying ? "01:14" : "00:00"} / 02:45
+                  {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
                 </span>
               </div>
               <div className="w-40 sm:w-44 h-1.5 bg-[var(--hairline)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[var(--primary)] rounded-full transition-all duration-300"
-                  style={{ width: isPlaying ? "58%" : "25%" }}
+                  style={{
+                    width: `${duration > 0 ? Math.min(100, Math.round((currentTime / duration) * 100)) : 0}%`,
+                  }}
                 />
               </div>
             </div>
@@ -312,7 +431,12 @@ export function BriefingView({ currentUser, onNavigateTab }: BriefingViewProps) 
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {data.brief_bullets.map((bullet, idx) => (
+            {data.brief_bullets
+              .filter(
+                (bullet) =>
+                  !/monitoring active|is successfully active and monitoring|monitoring discussions across/i.test(bullet)
+              )
+              .map((bullet, idx) => (
               <div
                 key={idx}
                 className="flex items-start gap-3 p-3.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] hover:border-[var(--hairline)] transition-colors"

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { SocialIcon } from "@/components/icons/AppIcons";
 import { cn } from "@/lib/utils";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 interface WhatsAppConnectionModalProps {
   isOpen: boolean;
@@ -32,11 +33,14 @@ export function WhatsAppConnectionModal({
   onClose,
   onSuccess,
   onOpenSettings,
-  initialPhoneNumber = "+91 9768368524",
+  initialPhoneNumber = "",
   currentUser,
 }: WhatsAppConnectionModalProps) {
   const [step, setStep] = useState<"phone" | "code" | "connected">("phone");
-  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber);
+  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber || "+91");
+  const [rawDigits, setRawDigits] = useState(
+    initialPhoneNumber ? initialPhoneNumber.replace(/^\+?[0-9]{1,4}\s*/, "") : ""
+  );
   const [linkingCode, setLinkingCode] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -225,23 +229,23 @@ export function WhatsAppConnectionModal({
           {/* ─── STEP 1: Phone Number Input ─── */}
           {step === "phone" && (
             <form onSubmit={handleGenerateCode} className="space-y-4">
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="text-xs font-[600] text-[var(--ink)] block">
-                  Phone Number with Country Code
+                  WhatsApp Mobile Number
                 </label>
-                <div className="relative">
-                  <Smartphone className="w-4 h-4 text-[var(--text-faint)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="+1 555 123 4567 or +91 98765 43210"
-                    required
-                    className="w-full pl-10 pr-4 py-3 rounded-full bg-[var(--field)] border border-transparent focus:border-[var(--ink)] text-sm text-[var(--ink)] placeholder:text-[var(--text-faint)] outline-none transition-all font-mono"
-                  />
-                </div>
+                <PhoneInput
+                  defaultCountry="IN"
+                  placeholder="98765 43210"
+                  value={rawDigits}
+                  onValueChange={(val, country) => {
+                    setRawDigits(val);
+                    const clean = val.replace(/[^0-9]/g, "");
+                    setPhoneNumber(`${country.dialCode} ${clean}`.trim());
+                  }}
+                  required
+                />
                 <p className="text-[11px] text-[var(--text-muted)] font-[300]">
-                  Include your country code (e.g. +1 for US/Canada, +44 for UK, +91 for India).
+                  Select your country dial code (defaults to India <span className="font-mono text-[var(--ink)] font-semibold">+91</span>) and enter your mobile number.
                 </p>
               </div>
 
@@ -260,7 +264,7 @@ export function WhatsAppConnectionModal({
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isLoading || !phoneNumber.trim()}
+                  disabled={isLoading || !rawDigits.trim()}
                   className="w-full py-3 rounded-full bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90 font-[600] text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
                 >
                   {isLoading ? (

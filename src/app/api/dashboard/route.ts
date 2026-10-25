@@ -152,7 +152,23 @@ export async function GET(request: NextRequest) {
             /\b202[7-9]\b|\b20[3-9]\d\b/.test(item.context || "")
           );
 
-          if (!hasDistantFutureItems) {
+          const hasStaleSlackInvite = cachedPriorityItems.some((item) =>
+            item.platform === "slack" && /invite/i.test(item.title)
+          );
+
+          const cachedBriefBullets = (cacheRow.brief_data as DashboardBriefData).brief_bullets || [];
+
+          // Invalidate cache if it contains passive status items (e.g. "Monitoring Active", "Bridge Active") in priority items OR bullets
+          const hasPassiveStatusItems =
+            cachedPriorityItems.some((item) =>
+              /monitoring active|bridge active|whatsapp bridge|bot standing by|monitoring discussions/i.test(item.title || "") ||
+              /monitoring active|bridge active|whatsapp bridge|bot standing by|monitoring discussions/i.test(item.context || "")
+            ) ||
+            cachedBriefBullets.some((bullet) =>
+              /monitoring active|is successfully active and monitoring|monitoring discussions across/i.test(bullet)
+            );
+
+          if (!hasDistantFutureItems && !hasStaleSlackInvite && !hasPassiveStatusItems) {
             const platforms = await getConnectedPlatformsSummary(userId);
             return NextResponse.json({
               success: true,
@@ -163,17 +179,28 @@ export async function GET(request: NextRequest) {
               platforms,
             });
           }
-          // If cached data contains stale distant-future reminders (e.g. 2027/2028), bypass cache and re-synthesize cleanly
+          // If cached data contains stale items or passive status cards, bypass cache and re-synthesize cleanly
         }
       } catch (err) {
         console.warn("Error reading user_dashboard_cache, proceeding to fresh generation:", err);
       }
     }
 
+    // Resolve user's real name and email for dynamic multi-tenant personalization
+    const { data: userRec } = await insforgeAdmin
+      .database
+      .from("users")
+      .select("name, email")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const executiveName = userRec?.name || userRec?.email?.split("@")[0] || "Executive";
+    const userEmail = userRec?.email || "";
+
     // 2. Cache Miss or Force Refresh: Fetch real data from user's connected platforms
     const [platforms, liveContext] = await Promise.all([
       getConnectedPlatformsSummary(userId),
-      fetchIntegrationsContext(userId),
+      fetchIntegrationsContext(userId, userEmail),
     ]);
 
     // 3. Gemini 3.5 Flash-Lite Engine Synthesis based on REAL connected account status
@@ -183,7 +210,7 @@ export async function GET(request: NextRequest) {
     if (geminiApiKey) {
       try {
         const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-        const prompt = `You are ToyBox.ai's multi-platform intelligence executive engine for the user Sushant Kate.
+        const prompt = `You are ToyBox.ai's multi-platform intelligence executive engine for the user ${executiveName}.
 Synthesize an executive intelligence summary strictly from the user's REAL connected platforms data:
 
 [GOOGLE CALENDAR REAL EVENTS]:
@@ -199,17 +226,24 @@ ${JSON.stringify(liveContext.slack, null, 2)}
 ${JSON.stringify(liveContext.whatsapp, null, 2)}
 
 RULES FOR SYNTHESIS:
-1. Base all counts, bullets, and priority items ONLY on the actual data provided above. NEVER invent fake emails or fictitious contacts (like Sarah Jenkins, David Miller, or Acme Corp).
-2. For calendar events: Only include events occurring within the near-term upcoming horizon (next 7 to 14 days). DO NOT include distant future events (e.g. 2027 or 2028). For repeating annual reminders like birthdays or anniversaries, only mention them if they fall within the immediate upcoming window (next 7 days), and NEVER show repeated instances for future years. Keep distant recurring reminders quiet.
-3. If Gmail has an error (such as Gmail API needing to be enabled in Google Cloud Console project 682852845369), create a clear high-priority action advising the user to enable the Gmail API in their Google Cloud Console.
-4. If Slack is connected to workspace "ToyBox Dev Lab" with channels (#social, #all-toybox-dev-lab, #new-channel) but bot needs channel invitation, advise inviting the bot via "/invite @ToyBox AI Assistant".
-5. If WhatsApp is active with no new unread messages, confirm that the WhatsApp multi-device bridge is active and monitoring.
-6. Provide exact JSON with:
+1. Base all counts, bullets, and priority items ONLY on actual real updates provided above. NEVER invent fake emails, imaginary tasks, or fictitious contacts.
+2. "priority_items" must strictly contain REAL ACTIONABLE ITEMS ONLY (e.g. urgent emails requiring reply, bills/recharges due today, immediate meetings/commitments within 7-14 days).
+3. DO NOT repeat passive connection or routine monitoring confirmations (such as "Slack monitoring active", "ToyBox bot active in channels", "Monitoring discussions across channels", "WhatsApp bridge active", "Connected and monitoring"). Normal connection status is ALREADY permanently displayed in the left platform status sidebar. Once an integration is set up, DO NOT repeat these status confirmations in either "brief_bullets" or "priority_items".
+4. For calendar events: Only include events occurring within the near-term upcoming horizon (next 7 to 14 days). DO NOT include distant future events (e.g. 2027 or 2028). For repeating annual reminders like birthdays or anniversaries, only mention them if they fall within the immediate upcoming window (next 7 days), and NEVER show repeated instances for future years. Keep distant recurring reminders quiet.
+5. If Gmail has an error (such as Gmail API needing activation), create a clear high-priority action advising the user to enable the Gmail API in their Google Cloud Console.
+6. For Slack:
+   - ONLY if needsChannelInvite is true (meaning the bot has joined 0 channels in their workspace), advise inviting the bot to a channel via "/invite @ToyBox".
+   - If the bot has ALREADY joined channels (needsChannelInvite is false, joinedChannels is not empty), DO NOT create any invite action items or monitoring status bullets. That setup is already complete and must NOT be repeated every day.
+7. For WhatsApp:
+   - If there are unread messages, report them.
+   - If WhatsApp is connected with 0 unread messages, DO NOT create any "bridge active" or "monitoring active" bullet or priority item.
+8. Executive brief bullets must be high-impact intelligence updates (e.g., upcoming meetings today/this week, unread inbox summary, pending action items). If all connected platforms are calm and up-to-date with 0 urgent items, summarize: "All connected communication channels and platforms are quiet with 0 pending actions or urgent alerts."
+9. Provide exact JSON with:
    - "important_count": number of urgent items / setup actions needing attention
    - "priority_count": number of priority tasks / upcoming calendar items
    - "followup_count": number of follow-ups
-   - "brief_bullets": exactly 3 or 4 high-impact, factually accurate bullet points
-   - "priority_items": array of 4 to 8 prioritized action items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
+   - "brief_bullets": exactly 2 to 4 high-impact, factually accurate bullet points
+   - "priority_items": array of 1 to 6 prioritized action items (each with "id", "platform" [gmail|slack|whatsapp|calendar], "title", "context", "time", "priority" [high|medium|urgent])
 
 Respond ONLY with valid JSON conforming to the schema without markdown blocks.`;
 
@@ -361,7 +395,7 @@ async function getConnectedPlatformsSummary(userId: string) {
 }
 
 // Concurrently fetch REAL live data from user's connected integrations
-async function fetchIntegrationsContext(userId: string) {
+async function fetchIntegrationsContext(userId: string, userEmail?: string) {
   const { data: integrations } = await insforgeAdmin
     .database
     .from("user_integrations")
@@ -374,11 +408,14 @@ async function fetchIntegrationsContext(userId: string) {
   }
 
   // 1. Google Calendar: Fetch REAL live events using auto-refreshed token
+  const calendarAccount = (intMap.get("gcal")?.metadata?.account_email as string) || userEmail || "Primary Calendar";
   const calendarData: {
     status: string;
+    account: string;
     events: Array<{ summary: string; start: string; attendees?: string }>;
   } = {
-    status: "connected",
+    status: intMap.get("gcal")?.status || "connected",
+    account: calendarAccount,
     events: [],
   };
 
@@ -446,6 +483,7 @@ async function fetchIntegrationsContext(userId: string) {
   }
 
   // 2. Gmail: Fetch REAL unread messages using auto-refreshed token
+  const gmailAccount = (intMap.get("gmail")?.metadata?.account_email as string) || userEmail || "Primary Inbox";
   const emailData: {
     status: string;
     account: string;
@@ -454,7 +492,7 @@ async function fetchIntegrationsContext(userId: string) {
     messages: Array<{ from: string; subject: string; snippet: string; date: string }>;
   } = {
     status: intMap.get("gmail")?.status || "connected",
-    account: (intMap.get("gmail")?.metadata?.account_email as string) || "sushant98k@gmail.com",
+    account: gmailAccount,
     unreadCount: 0,
     messages: [],
   };
@@ -502,38 +540,56 @@ async function fetchIntegrationsContext(userId: string) {
     }
   }
 
-  // 3. Slack: Fetch REAL channels and status
+  // 3. Slack: Fetch REAL channels and dynamic membership status
+  const slackRow = intMap.get("slack");
+  const isSlackConnected = slackRow ? slackRow.status === "connected" : false;
+  const slackWorkspace =
+    (slackRow?.metadata?.team_name as string) ||
+    (slackRow?.metadata?.workspace_name as string) ||
+    "Connected Workspace";
+
   const slackData: {
     status: string;
     workspace: string;
     channels: string[];
+    joinedChannels: string[];
     needsChannelInvite: boolean;
   } = {
-
-    status: intMap.get("slack")?.status || "connected",
-    workspace: (intMap.get("slack")?.metadata?.team_name as string) || "ToyBox Dev Lab",
-    channels: ["#social", "#all-toybox-dev-lab", "#new-channel"],
-    needsChannelInvite: true,
+    status: isSlackConnected ? "connected" : "disconnected",
+    workspace: slackWorkspace,
+    channels: [],
+    joinedChannels: [],
+    needsChannelInvite: false,
   };
 
   const slackToken =
-    (intMap.get("slack")?.credentials?.access_token as string) ||
-    (intMap.get("slack")?.credentials?.bot_access_token as string) ||
+    (slackRow?.credentials?.bot_access_token as string) ||
+    (slackRow?.credentials?.access_token as string) ||
     process.env.SLACK_BOT_TOKEN;
 
-  if (slackToken) {
+  if (isSlackConnected && slackToken) {
     try {
-      const cRes = await fetch("https://slack.com/api/conversations.list?types=public_channel,private_channel", {
-        headers: { Authorization: `Bearer ${slackToken}` },
-      });
+      const cRes = await fetch(
+        "https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true&limit=100",
+        { headers: { Authorization: `Bearer ${slackToken}` } }
+      );
       if (cRes.ok) {
         const cJson = await cRes.json();
-        if (cJson.ok && cJson.channels) {
+        if (cJson.ok && Array.isArray(cJson.channels)) {
           slackData.channels = cJson.channels.map((c: { name: string }) => `#${c.name}`);
+          
+          // Detect channels where the bot has actually been invited/joined
+          const memberChannels = cJson.channels
+            .filter((c: { is_member?: boolean }) => Boolean(c.is_member))
+            .map((c: { name: string }) => `#${c.name}`);
+
+          slackData.joinedChannels = memberChannels;
+          // Only prompt for invite if the bot has 0 joined channels across their workspace
+          slackData.needsChannelInvite = memberChannels.length === 0 && slackData.channels.length > 0;
         }
       }
     } catch (e) {
-      console.warn("Could not list Slack channels:", e);
+      console.warn("Could not list Slack channels dynamically:", e);
     }
   }
 
@@ -542,7 +598,7 @@ async function fetchIntegrationsContext(userId: string) {
   const liveWaMsgs = getWhatsAppMessages(userId);
   const whatsAppData = {
     status: whatsAppStatus.status,
-    phoneNumber: whatsAppStatus.phoneNumber || "+91 9768368524",
+    phoneNumber: whatsAppStatus.phoneNumber || (intMap.get("whatsapp")?.metadata?.phone_number as string) || "",
     syncActive: whatsAppStatus.syncMessages,
     unreadCount: liveWaMsgs.filter((m) => m.unread).length,
     messages: liveWaMsgs.slice(0, 5),
@@ -563,32 +619,40 @@ function buildDynamicRealBullets(context: Awaited<ReturnType<typeof fetchIntegra
   if (context.calendar.events.length > 0) {
     const firstEvt = context.calendar.events[0];
     bullets.push(
-      `Google Calendar: Upcoming event "${firstEvt.summary}" on ${firstEvt.start}. ${context.calendar.events.length} upcoming event(s) in the next 14 days.`
+      `Google Calendar: Upcoming event "${firstEvt.summary}" on ${firstEvt.start}. ${context.calendar.events.length} event(s) scheduled in the next 14 days.`
     );
   } else {
-    bullets.push("Google Calendar: Connected to sushant98k@gmail.com with 0 scheduled meetings or conflicts in the next 14 days.");
+    bullets.push("Google Calendar: Schedule is clear with 0 conflicts in the next 14 days.");
   }
 
   // Gmail
   if (context.emails.apiDisabled) {
     bullets.push(
-      "Gmail (sushant98k@gmail.com): OAuth connected. Gmail API needs to be enabled in Google Cloud Console project 682852845369 to activate message sync."
+      "Gmail: Connected via OAuth. Gmail API requires activation in your Google Cloud project to fetch inbox messages."
     );
   } else if (context.emails.messages.length > 0) {
-    bullets.push(`Gmail: ${context.emails.unreadCount} unread email(s) found in sushant98k@gmail.com inbox.`);
+    bullets.push(`Gmail: ${context.emails.unreadCount} unread email(s) found in inbox, with top messages awaiting review.`);
   } else {
-    bullets.push("Gmail: Connected to sushant98k@gmail.com. Inbox has 0 unread urgent messages requiring attention.");
+    bullets.push("Gmail: Primary inbox is caught up with 0 urgent unread messages.");
   }
 
-  // Slack
-  bullets.push(
-    `Slack (${context.slack.workspace}): Connected with ${context.slack.channels.length} channels (${context.slack.channels.slice(0, 3).join(", ")}). Bot is standing by for channel invitations.`
-  );
+  // Slack (Only alert if action required, such as missing channel invite. Never repeat static monitoring status once active!)
+  if (context.slack.status === "connected" && context.slack.needsChannelInvite) {
+    bullets.push(
+      `Slack (${context.slack.workspace}): Bot has not joined any channels yet. Type "/invite @ToyBox" into a channel to start channel intelligence.`
+    );
+  }
 
-  // WhatsApp
-  bullets.push(
-    `WhatsApp: Multi-device paired to ${context.whatsapp.phoneNumber}. End-to-end encrypted channel is live and awaiting incoming messages.`
-  );
+  // WhatsApp (Only report if there are unread messages. Never repeat static bridge active status!)
+  if (context.whatsapp.status === "connected" && context.whatsapp.unreadCount > 0) {
+    bullets.push(
+      `WhatsApp: ${context.whatsapp.unreadCount} unread chat message(s) awaiting response.`
+    );
+  }
+
+  if (bullets.length === 0) {
+    bullets.push("All connected communication channels and platforms are up to date with 0 pending actions.");
+  }
 
   return bullets;
 }
@@ -601,7 +665,7 @@ function buildDynamicRealPriorityItems(context: Awaited<ReturnType<typeof fetchI
       id: "pri_gmail_enable",
       platform: "gmail",
       title: "Enable Gmail API in Google Cloud Console",
-      context: "Project 682852845369 requires Gmail API activation to allow automatic inbox classification.",
+      context: "Gmail API needs activation in your Google Cloud Console to allow automatic inbox classification.",
       time: "Action required",
       priority: "urgent",
     });
@@ -635,26 +699,19 @@ function buildDynamicRealPriorityItems(context: Awaited<ReturnType<typeof fetchI
     });
   }
 
-  // Slack channel invite
-  items.push({
-    id: "pri_slack_invite",
-    platform: "slack",
-    title: "Invite Slack Bot to Channels",
-    context: `Type "/invite @ToyBox" into ${context.slack.channels[0] || "#general"} in workspace "${context.slack.workspace}".`,
-    time: "Setup item",
-    priority: "medium",
-  });
+  // Slack channel invite (ONLY if the bot actually hasn't joined any channel)
+  if (context.slack.status === "connected" && context.slack.needsChannelInvite) {
+    items.push({
+      id: "pri_slack_invite",
+      platform: "slack",
+      title: "Invite Slack Bot to Channels",
+      context: `Type "/invite @ToyBox" into ${context.slack.channels[0] || "#general"} in workspace "${context.slack.workspace}".`,
+      time: "Setup item",
+      priority: "medium",
+    });
+  }
 
-  // WhatsApp telemetry
-  items.push({
-    id: "pri_whatsapp_live",
-    platform: "whatsapp",
-    title: "WhatsApp Bridge Active",
-    context: `Baileys multi-device connected for ${context.whatsapp.phoneNumber}. 0 pending critical alerts.`,
-    time: "Live",
-    priority: "medium",
-  });
-
+  // NOTE: Normal active monitoring (Slack or WhatsApp) is NOT pushed as an action item.
   return items;
 }
 

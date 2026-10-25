@@ -502,7 +502,10 @@ export async function getOrRestoreWASocket(userId: string): Promise<WASocket | n
       return null;
     }
 
-    const rawPhone = record.metadata?.phone_number || record.credentials?.phone_number || "+91 9768368524";
+    const rawPhone = record.metadata?.phone_number || record.credentials?.phone_number;
+    if (!rawPhone) {
+      return null;
+    }
     const { state, saveCreds } = await useDatabaseAuthState(userId, false);
     const reconnectAttempts = { count: 0 };
     const sock = await createAndBindWASocket(userId, rawPhone, state, saveCreds, reconnectAttempts);
@@ -523,7 +526,7 @@ export async function requestWhatsAppPairingCode(
   const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
 
   if (cleanPhone.length < 8) {
-    throw new Error("Please enter a valid phone number with country code (e.g. +1 555 123 4567 or +91 9768368524)");
+    throw new Error("Please enter a valid phone number with country code (e.g. +1 555 123 4567 or +44 7911 123456)");
   }
 
   // Clean existing socket if any
@@ -586,7 +589,7 @@ export async function requestWhatsAppPairingCode(
     sessions.set(userId, session);
     throw new Error(
       err.message ||
-        "Could not generate WhatsApp linking code. Ensure your phone number includes the international country code (e.g. +91 9768368524)."
+        "Could not generate WhatsApp linking code. Ensure your phone number includes the international country code (e.g. +1 555 123 4567 or +44 7911 123456)."
     );
   }
 
@@ -694,7 +697,7 @@ export async function getWhatsAppStatus(
     if (data && data.status === "connected") {
       const restored: WhatsAppSessionState = {
         userId,
-        phoneNumber: data.metadata?.phone_number || data.credentials?.phone_number || "+91 9768368524",
+        phoneNumber: data.metadata?.phone_number || data.credentials?.phone_number || "",
         status: "connected",
         lastConnectedAt: data.last_synced_at || new Date().toISOString(),
         syncMessages: data.metadata?.sync_messages ?? true,
@@ -782,7 +785,7 @@ export async function reconnectWhatsApp(
 ): Promise<{ success: boolean; pairingCode: string; status: string; formattedPhone: string }> {
   const session = await getWhatsAppStatus(userId);
   if (!session.phoneNumber) {
-    session.phoneNumber = "+91 9768368524";
+    throw new Error("No phone number linked for WhatsApp account.");
   }
   return requestWhatsAppPairingCode(userId, session.phoneNumber);
 }
@@ -816,7 +819,7 @@ export async function executeWhatsAppMcpTool(
   }
   const session = await getWhatsAppStatus(userId);
   const isLiveConnected = sock !== undefined && session?.status === "connected";
-  const userPhone = session.phoneNumber || "+91 9768368524";
+  const userPhone = session?.phoneNumber || "";
 
   switch (toolName) {
     case "whatsapp_fetch_recent_messages": {

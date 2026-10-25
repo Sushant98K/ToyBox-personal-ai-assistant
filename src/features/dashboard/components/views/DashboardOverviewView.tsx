@@ -410,17 +410,22 @@ export function DashboardOverviewView({
               ))}
             </div>
           ) : (
-            (data?.brief_bullets || []).map((bullet, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-3 p-3.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] hover:border-[var(--hairline)] transition-colors"
-              >
-                <span className="w-2 h-2 rounded-full bg-[#0066FF] mt-1.5 shrink-0" />
-                <p className="text-xs sm:text-sm text-[var(--ink)] leading-relaxed font-[456]">
-                  {bullet}
-                </p>
-              </div>
-            ))
+            (data?.brief_bullets || [])
+              .filter(
+                (bullet) =>
+                  !/monitoring active|is successfully active and monitoring|monitoring discussions across/i.test(bullet)
+              )
+              .map((bullet, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-start gap-3 p-3.5 rounded-[16px] bg-[var(--canvas)] border border-[var(--hairline-soft)] hover:border-[var(--hairline)] transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#0066FF] mt-1.5 shrink-0" />
+                  <p className="text-xs sm:text-sm text-[var(--ink)] leading-relaxed font-[456]">
+                    {bullet}
+                  </p>
+                </div>
+              ))
           )}
         </div>
 

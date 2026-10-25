@@ -449,7 +449,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           body: JSON.stringify({
             action: nextStatus === "connected" ? "connect" : "disconnect",
             credentials: {
-              accountEmail: currentUser?.email || "sushant98k@gmail.com",
+              accountEmail: currentUser?.email || "",
             },
           }),
         });
@@ -600,7 +600,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
               accountEmail:
                 savedData?.metadata?.account_email ||
                 currentUser?.email ||
-                "sushant98k@gmail.com",
+                "",
             }
           : item
       )
@@ -1061,7 +1061,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         onDisconnect={(id) => toggleConnect(id)}
         accountEmail={
           settingsPlatform?.id === "gmail"
-            ? integrations.find((i) => i.id === "gmail")?.accountEmail || currentUser?.email || "sushant98k@gmail.com"
+            ? integrations.find((i) => i.id === "gmail")?.accountEmail || currentUser?.email || ""
             : null
         }
       />
@@ -1076,7 +1076,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         onSuccess={handleWhatsAppConnected}
         onOpenSettings={() => setWhatsAppSettingsOpen(true)}
         initialPhoneNumber={
-          integrations.find((i) => i.id === "whatsapp")?.accountEmail || "+91 9768368524"
+          integrations.find((i) => i.id === "whatsapp")?.accountEmail || ""
         }
         currentUser={currentUser}
       />
@@ -1091,7 +1091,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
           setWhatsAppConnectionOpen(true);
         }}
         phoneNumber={
-          integrations.find((i) => i.id === "whatsapp")?.accountEmail || "+91 9768368524"
+          integrations.find((i) => i.id === "whatsapp")?.accountEmail || ""
         }
         tools={getPlatformById("whatsapp")?.mcpTools || []}
       />
@@ -1104,7 +1104,7 @@ export function IntegrationsView({ currentUser, onSyncCountChange }: Integration
         accountEmail={
           integrations.find((i) => i.id === "gcal")?.accountEmail ||
           currentUser?.email ||
-          "sushant98k@gmail.com"
+          ""
         }
         timezone={integrations.find((i) => i.id === "gcal")?.timezone || "Asia/Kolkata"}
         lastSync={integrations.find((i) => i.id === "gcal")?.lastSync || "Just now"}
