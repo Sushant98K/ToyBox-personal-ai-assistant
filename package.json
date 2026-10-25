@@ -12,6 +12,7 @@
     "@google/genai": "^2.31.0",
     "@insforge/sdk": "^1.5.2",
     "@radix-ui/react-slot": "^1.5.0",
+    "@trigger.dev/sdk": "^4.8.1",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@trigger.dev/build": "^4.8.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
