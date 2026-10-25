@@ -23,6 +23,22 @@
   --text-faint: #707070;       /* Placeholders, de-emphasized footer links, fine print */
   --on-primary: #141414;       /* Near-black labels on the white primary pill */
   color-scheme: dark;
+
+  /* SchedulePicker Design Tokens */
+  --action-primary: #507fff;
+  --action-primary-hover: #8aafff;
+  --ink-primary: #f8f9fb;
+  --ink-secondary: #aab0bb;
+  --ink-muted: #838a97;
+  --ink-brand: #8aafff;
+  --ink-on-brand: #ffffff;
+  --surface-base: #141414;
+  --surface-raised: #1d1d1d;
+  --surface-sunken: #1c1f26;
+  --surface-brand-subtle: #061460;
+  --border-strong: #576071;
+  --border-subtle: #292e37;
+  --focus-ring: #8aafff;
 }
 
 [data-theme="light"],
@@ -42,6 +58,22 @@
   --text-faint: #adadad;       /* Tertiary text, placeholders */
   --on-primary: #ffffff;       /* Labels on ink fills */
   color-scheme: light;
+
+  /* SchedulePicker Design Tokens */
+  --action-primary: #2b52ff;
+  --action-primary-hover: #1733d5;
+  --ink-primary: #0a0b0c;
+  --ink-secondary: #576071;
+  --ink-muted: #686e78;
+  --ink-brand: #1733d5;
+  --ink-on-brand: #ffffff;
+  --surface-base: #ffffff;
+  --surface-raised: #f8f9fb;
+  --surface-sunken: #eff1f4;
+  --surface-brand-subtle: #eef4ff;
+  --border-strong: #aab0bb;
+  --border-subtle: #dfe2e8;
+  --focus-ring: #2b52ff;
 }
 
 @theme {

@@ -1,6 +1,7 @@
 import { insforgeAdmin } from "@/lib/insforge-admin";
 import { GeneratedBriefing, BriefingSchedule } from "@/types/briefing";
 import { deduplicateBriefingItems, detectCalendarHorizon } from "@/lib/briefings/deduplicate";
+import { nextScheduledRun, ScheduleValue } from "@/components/ui/schedule-picker";
 
 /**
  * Sanitizes briefing by deduplicating items and updating counts
@@ -27,10 +28,23 @@ function sanitizeBriefing(briefing: GeneratedBriefing): GeneratedBriefing {
 }
 
 /**
- * Calculates next run date based on scheduled time (e.g. "08:30")
+ * Calculates next run date based on scheduled time string (e.g. "08:30" or ScheduleValue JSON)
  */
-export function calculateNextRunAt(scheduledTime: string = "08:30"): string {
-  const [hoursStr, minutesStr] = scheduledTime.split(":");
+export function calculateNextRunAt(scheduledTime: string = "08:30"): string | null {
+  if (typeof scheduledTime === "string" && scheduledTime.trim().startsWith("{")) {
+    try {
+      const parsed: ScheduleValue = JSON.parse(scheduledTime);
+      const nextDate = nextScheduledRun(parsed);
+      if (nextDate) {
+        return nextDate.toISOString();
+      }
+      return null;
+    } catch (e) {
+      console.warn("Error parsing scheduledTime JSON:", e);
+    }
+  }
+
+  const [hoursStr, minutesStr] = (scheduledTime || "08:30").split(":");
   const hours = parseInt(hoursStr || "8", 10);
   const minutes = parseInt(minutesStr || "30", 10);
 
@@ -275,13 +289,19 @@ export async function advanceScheduleNextRun(
   const now = new Date().toISOString();
   const nextRun = calculateNextRunAt(scheduledTime);
 
+  const updateFields: Record<string, any> = {
+    last_run_at: now,
+    next_run_at: nextRun,
+    updated_at: now,
+  };
+
+  if (nextRun === null) {
+    updateFields.is_active = false;
+  }
+
   await insforgeAdmin
     .database
     .from("briefing_schedules")
-    .update({
-      last_run_at: now,
-      next_run_at: nextRun,
-      updated_at: now,
-    })
+    .update(updateFields)
     .eq("id", scheduleId);
 }

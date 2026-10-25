@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { X, Sparkles, Clock, Check, ShieldAlert } from "lucide-react";
 import { SocialIcon } from "@/components/icons/AppIcons";
 import { BriefingCategory, BriefingSchedule } from "@/types/briefing";
+import { SchedulePicker, ScheduleValue, nextScheduledRun, describeSchedule } from "@/components/ui/schedule-picker";
 
 interface CreateCustomBriefingModalProps {
   isOpen: boolean;
@@ -54,7 +55,14 @@ export function CreateCustomBriefingModal({
     "meetings",
     "followups",
   ]);
-  const [scheduledTime, setScheduledTime] = useState("08:30");
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleValue>({
+    mode: "repeat",
+    time: "08:30",
+    zone: "Asia/Kolkata",
+    freq: "daily",
+    days: ["1"],
+    dom: "1",
+  });
   const [priorityThreshold, setPriorityThreshold] = useState<"all" | "high_only">("all");
   const [calendarScope, setCalendarScope] = useState<"7d" | "14d" | "month" | "quarter" | "year">("7d");
   const [runImmediately, setRunImmediately] = useState(true);
@@ -108,6 +116,9 @@ export function CreateCustomBriefingModal({
           ? `${promptGoal.trim() || name.trim()} [Scope: ${scopeLabel}]`
           : promptGoal.trim() || name.trim();
 
+      const serializedSchedule = JSON.stringify(scheduleConfig);
+      const computedNextRun = nextScheduledRun(scheduleConfig);
+
       const res = await fetch("/api/briefings/schedules", {
         method: "POST",
         headers,
@@ -116,7 +127,8 @@ export function CreateCustomBriefingModal({
           prompt_goal: effectivePrompt,
           platforms: selectedPlatforms,
           categories: selectedCategories,
-          scheduled_time: scheduledTime,
+          scheduled_time: serializedSchedule,
+          next_run_at: computedNextRun ? computedNextRun.toISOString() : undefined,
           priority_threshold: priorityThreshold,
           is_active: true,
         }),
@@ -316,52 +328,43 @@ export function CreateCustomBriefingModal({
             </div>
           </div>
 
-          {/* Frequency & Scheduled Time & Priority Filter */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[var(--hairline)]">
-            <div className="space-y-1.5">
-              <label className="text-xs font-[600] text-[var(--ink-soft)] flex items-center gap-1.5 uppercase tracking-wider">
-                <Clock className="w-3.5 h-3.5 text-[#0066FF]" />
-                <span>Daily Scheduled Time</span>
-              </label>
-              <input
-                type="time"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                className="w-full px-4 py-2 rounded-xl bg-[var(--field)] border border-[var(--hairline)] text-sm text-[var(--ink)] focus:outline-none focus:border-[#0066FF]"
-              />
-              <span className="text-[10px] text-[var(--text-muted)]">
-                Evaluated by 15-minute background worker
-              </span>
-            </div>
+          {/* Schedule Picker */}
+          <div className="pt-2 border-t border-[var(--hairline)]">
+            <SchedulePicker
+              label="Briefing Schedule & Timing"
+              value={scheduleConfig}
+              onChange={(val) => setScheduleConfig(val)}
+            />
+          </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-[600] text-[var(--ink-soft)] uppercase tracking-wider">
-                Priority Threshold
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPriorityThreshold("all")}
-                  className={`py-2 px-3 rounded-xl text-xs font-[600] border transition-all cursor-pointer ${
-                    priorityThreshold === "all"
-                      ? "bg-[var(--canvas)] border-[#0066FF] text-[var(--ink)]"
-                      : "bg-[var(--canvas)] border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  All Items
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPriorityThreshold("high_only")}
-                  className={`py-2 px-3 rounded-xl text-xs font-[600] border transition-all cursor-pointer ${
-                    priorityThreshold === "high_only"
-                      ? "bg-[var(--canvas)] border-[#0066FF] text-[var(--ink)]"
-                      : "bg-[var(--canvas)] border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  High & Urgent Only
-                </button>
-              </div>
+          {/* Priority Filter */}
+          <div className="space-y-1.5 pt-2 border-t border-[var(--hairline)]">
+            <label className="text-xs font-[600] text-[var(--ink-soft)] uppercase tracking-wider">
+              Priority Threshold
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPriorityThreshold("all")}
+                className={`py-2 px-3 rounded-xl text-xs font-[600] border transition-all cursor-pointer ${
+                  priorityThreshold === "all"
+                    ? "bg-[var(--canvas)] border-[#0066FF] text-[var(--ink)]"
+                    : "bg-[var(--canvas)] border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--ink)]"
+                }`}
+              >
+                All Items
+              </button>
+              <button
+                type="button"
+                onClick={() => setPriorityThreshold("high_only")}
+                className={`py-2 px-3 rounded-xl text-xs font-[600] border transition-all cursor-pointer ${
+                  priorityThreshold === "high_only"
+                    ? "bg-[var(--canvas)] border-[#0066FF] text-[var(--ink)]"
+                    : "bg-[var(--canvas)] border-[var(--hairline)] text-[var(--text-muted)] hover:text-[var(--ink)]"
+                }`}
+              >
+                High & Urgent Only
+              </button>
             </div>
           </div>
 
@@ -412,7 +415,7 @@ export function CreateCustomBriefingModal({
             <label htmlFor="runImmediately" className="text-xs text-[var(--ink)] cursor-pointer select-none">
               <span className="font-[600]">Generate initial briefing immediately</span>
               <span className="text-[var(--text-muted)] block text-[11px] mt-0.5 font-[300]">
-                Synthesize a live briefing right now using your custom focus prompt, and keep it scheduled daily at {scheduledTime}.
+                Synthesize a live briefing right now using your custom focus prompt, and keep it scheduled: {describeSchedule(scheduleConfig)}.
               </span>
             </label>
           </div>

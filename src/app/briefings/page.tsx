@@ -29,6 +29,20 @@ import { GeneratedBriefing, BriefingSchedule, BriefingCategory } from "@/types/b
 import { formatHumanDateTime, formatSnippetText } from "@/lib/briefings/date-formatter";
 import { deduplicateBriefingItems, detectCalendarHorizon } from "@/lib/briefings/deduplicate";
 import { insforge } from "@/lib/insforge";
+import { describeSchedule } from "@/components/ui/schedule-picker";
+
+function formatScheduleBadge(scheduledTime: string): string {
+  if (!scheduledTime) return "Daily at 08:30";
+  if (scheduledTime.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(scheduledTime);
+      return describeSchedule(parsed);
+    } catch {
+      return `Daily at ${scheduledTime}`;
+    }
+  }
+  return `Daily at ${scheduledTime}`;
+}
 
 export default function BriefingsPage() {
   const router = useRouter();
@@ -661,9 +675,11 @@ export default function BriefingsPage() {
                             <h3 className="font-[652] text-sm text-[var(--ink)] tracking-tight">
                               {s.name}
                             </h3>
-                            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                              <Clock className="w-3 h-3 text-[var(--text-faint)]" />
-                              <span>Daily at {s.scheduled_time}</span>
+                            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--text-muted)] mt-1 max-w-full">
+                              <Clock className="w-3 h-3 text-[var(--text-faint)] shrink-0" />
+                              <span className="truncate" title={formatScheduleBadge(s.scheduled_time)}>
+                                {formatScheduleBadge(s.scheduled_time)}
+                              </span>
                             </div>
                           </div>
 
