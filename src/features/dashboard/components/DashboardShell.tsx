@@ -27,10 +27,14 @@ export function DashboardShell() {
 
   // Synchronize activeTab whenever tab query parameter changes
   useEffect(() => {
+    if (tabFromUrl === "ai-agent") {
+      router.push("/ai-agent");
+      return;
+    }
     if (tabFromUrl && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
-  }, [tabFromUrl, activeTab]);
+  }, [tabFromUrl, activeTab, router]);
 
   // Sidebar collapsible state
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -114,6 +118,10 @@ export function DashboardShell() {
   const handleTabChange = (tab: DashboardTab) => {
     if (tab === "briefing") {
       router.push("/briefings");
+      return;
+    }
+    if (tab === "ai-agent") {
+      router.push("/ai-agent");
       return;
     }
     setActiveTab(tab);

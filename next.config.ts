@@ -24,12 +24,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/agent",
-        destination: "/dashboard?tab=ai-agent",
-        permanent: false,
-      },
-      {
-        source: "/ai-agent",
-        destination: "/dashboard?tab=ai-agent",
+        destination: "/ai-agent",
         permanent: false,
       },
       {

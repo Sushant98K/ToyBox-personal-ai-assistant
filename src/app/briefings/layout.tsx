@@ -46,6 +46,8 @@ export default function BriefingsLayout({
   const handleTabChange = (tab: DashboardTab) => {
     if (tab === "briefing") {
       router.push("/briefings");
+    } else if (tab === "ai-agent") {
+      router.push("/ai-agent");
     } else {
       router.push(`/dashboard?tab=${tab}`);
     }
