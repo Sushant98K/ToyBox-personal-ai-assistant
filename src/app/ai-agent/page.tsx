@@ -5,7 +5,7 @@ import { ChatInterface } from "@/components/agent/ChatInterface";
 export const metadata: Metadata = {
   title: `AI Agent – Autonomous Chief of Staff – ${siteConfig.name}`,
   description:
-    "Live executive AI assistant connected to Gmail, WhatsApp, Slack, and Google Calendar via Gemini 3.5 Flash-Lite and MCP.",
+    "Live executive AI assistant connected to Gmail, WhatsApp, Slack, and Google Calendar via Gemini 3.1 Flash-Lite and MCP.",
 };
 
 export default function AiAgentPage() {

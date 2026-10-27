@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insforgeAdmin } from "@/lib/insforge-admin";
+import { getValidGoogleToken } from "@/lib/agent/tools";
+import { getWhatsAppStatus, getWhatsAppMessages } from "@/lib/whatsapp-baileys";
 
 async function resolveUserId(request: NextRequest): Promise<string> {
   const customUserId = request.headers.get("x-user-id");
@@ -31,77 +33,134 @@ export async function GET(request: NextRequest) {
   try {
     const userId = await resolveUserId(request);
 
-    // 1. Fetch latest generated briefing
+    // 1. Fetch user's latest personalized briefing
     const { data: briefings } = await insforgeAdmin
       .database
       .from("generated_briefings")
       .select("id, title, executive_summary, highlights, category_counts, created_at")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(1);
 
     const latestBriefing = briefings?.[0] || null;
 
-    // 2. Fetch user's connected integrations
+    // 2. Fetch user's real connected integrations
     const { data: integrations } = await insforgeAdmin
       .database
       .from("user_integrations")
       .select("platform_id, status, last_synced_at, messages_processed")
       .eq("user_id", userId);
 
-    const connectedPlatforms = (integrations || []).map((i) => ({
-      id: i.platform_id,
-      name:
-        i.platform_id === "gmail"
-          ? "Gmail"
-          : i.platform_id === "slack"
-          ? "Slack"
-          : i.platform_id === "whatsapp"
-          ? "WhatsApp"
-          : i.platform_id === "gcal" || i.platform_id === "calendar"
-          ? "Google Calendar"
-          : i.platform_id,
-      status: i.status || "disconnected",
-      isConnected: i.status === "connected",
-    }));
+    const integrationMap = new Map<string, any>();
+    (integrations || []).forEach((i) => {
+      integrationMap.set(i.platform_id, i);
+    });
 
-    // Derive unread / important message count
-    let importantMessagesCount = 3;
-    if (latestBriefing?.category_counts?.messages) {
-      importantMessagesCount = latestBriefing.category_counts.messages;
+    // Check live WhatsApp Baileys status
+    const liveWhatsApp = await getWhatsAppStatus(userId).catch(() => null);
+    const isWhatsAppConnected =
+      liveWhatsApp?.status === "connected" ||
+      integrationMap.get("whatsapp")?.status === "connected";
+
+    const isGmailConnected = integrationMap.get("gmail")?.status === "connected";
+    const isCalendarConnected =
+      integrationMap.get("gcal")?.status === "connected" ||
+      integrationMap.get("calendar")?.status === "connected";
+    const isSlackConnected = integrationMap.get("slack")?.status === "connected";
+
+    const connectedPlatforms = [
+      { id: "gmail", name: "Gmail", status: isGmailConnected ? "connected" : "disconnected", isConnected: Boolean(isGmailConnected) },
+      { id: "slack", name: "Slack", status: isSlackConnected ? "connected" : "disconnected", isConnected: Boolean(isSlackConnected) },
+      { id: "whatsapp", name: "WhatsApp", status: isWhatsAppConnected ? "connected" : "disconnected", isConnected: Boolean(isWhatsAppConnected) },
+      { id: "gcal", name: "Google Calendar", status: isCalendarConnected ? "connected" : "disconnected", isConnected: Boolean(isCalendarConnected) },
+    ];
+
+    // 3. Dynamic Real Upcoming Calendar Event
+    let nextMeetingTitle = "Schedule clear — no meetings today";
+    let nextMeetingTime = "All Clear";
+    let meetingUrgency = "normal";
+
+    if (isCalendarConnected) {
+      try {
+        const calToken = await getValidGoogleToken("gcal", userId);
+        if (calToken) {
+          const nowIso = new Date().toISOString();
+          const endOfDay = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
+          const res = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
+              nowIso
+            )}&timeMax=${encodeURIComponent(
+              endOfDay
+            )}&singleEvents=true&orderBy=startTime&maxResults=1`,
+            { headers: { Authorization: `Bearer ${calToken}` }, signal: AbortSignal.timeout(4000) }
+          );
+
+          if (res.ok) {
+            const calData = await res.json();
+            const firstEvt = calData.items?.[0];
+            if (firstEvt) {
+              nextMeetingTitle = firstEvt.summary || "Scheduled Event";
+              const startTime = firstEvt.start?.dateTime || firstEvt.start?.date;
+              nextMeetingTime = startTime
+                ? new Date(startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "Today";
+              meetingUrgency = "high";
+            }
+          }
+        }
+      } catch (calErr) {
+        console.warn("Could not query live calendar for summary bar:", calErr);
+      }
     }
 
-    // Top brief snippet
+    // 4. Derive unread / important message count from real data or briefing
+    let unreadCount = 0;
+    if (latestBriefing?.category_counts?.messages) {
+      unreadCount = latestBriefing.category_counts.messages;
+    } else {
+      // Check live WhatsApp unread count
+      const waMsgs = getWhatsAppMessages(userId);
+      const waUnread = waMsgs.filter((m) => m.unread).length;
+      unreadCount = waUnread;
+    }
+
+    const connectedNames = connectedPlatforms.filter((c) => c.isConnected).map((c) => c.name);
+
+    let messagesLabel =
+      unreadCount > 0
+        ? `${unreadCount} unread items across ${connectedNames.join(" & ") || "inbox"}`
+        : connectedNames.length > 0
+        ? `All ${connectedNames.join(", ")} items triaged`
+        : "Connect apps in Integrations to view priority items";
+
+    // 5. Briefing snippet
+    const briefTitle = latestBriefing?.title || "Executive Intelligence Overview";
     const briefSnippet = latestBriefing?.executive_summary
       ? latestBriefing.executive_summary.slice(0, 140) + "..."
-      : "Executive briefing synthesized across Gmail, Slack, and Google Calendar.";
+      : connectedNames.length > 0
+      ? `AI agent synchronized across ${connectedNames.join(", ")}. Ask any question or request a triage brief.`
+      : "Connect your workspace integrations to unlock real-time executive summaries.";
 
     const briefTimestamp = latestBriefing?.created_at
       ? new Date(latestBriefing.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : "08:30 AM";
-
-    // Next event or urgency flag
-    const urgentHighlight = latestBriefing?.highlights?.find(
-      (h: any) => h.urgency === "urgent" || h.urgency === "high"
-    );
-
-    const scheduleAlert = {
-      title: urgentHighlight?.text || "ToyBox Executive AI Architecture Review (45m)",
-      time: "10:45 AM",
-      urgency: urgentHighlight?.urgency || "high",
-    };
+      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
     return NextResponse.json({
       todaysBrief: {
-        title: latestBriefing?.title || "Executive Daily Intelligence Brief",
+        title: briefTitle,
         snippet: briefSnippet,
         timestamp: briefTimestamp,
         id: latestBriefing?.id,
       },
       importantMessages: {
-        unreadCount: importantMessagesCount,
-        label: `${importantMessagesCount} Priority items from Slack & WhatsApp`,
+        unreadCount,
+        label: messagesLabel,
       },
-      scheduleAlert,
+      scheduleAlert: {
+        title: nextMeetingTitle,
+        time: nextMeetingTime,
+        urgency: meetingUrgency,
+      },
       connectors: connectedPlatforms,
     });
   } catch (err: any) {
@@ -109,24 +168,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         todaysBrief: {
-          title: "Executive Daily Intelligence Brief",
-          snippet: "Review urgent vendor agreements and Q3 EBITDA sign-off before 9am.",
-          timestamp: "08:30 AM",
+          title: "Executive Intelligence Overview",
+          snippet: "Ask ToyBox AI to synthesize communications or inspect your upcoming schedule.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
         importantMessages: {
-          unreadCount: 4,
-          label: "4 Priority items from Slack & WhatsApp",
+          unreadCount: 0,
+          label: "Inboxes up to date",
         },
         scheduleAlert: {
-          title: "ToyBox Executive AI Architecture Review",
-          time: "10:45 AM",
-          urgency: "high",
+          title: "Schedule clear — no meetings today",
+          time: "All Clear",
+          urgency: "normal",
         },
         connectors: [
-          { id: "gmail", name: "Gmail", status: "connected", isConnected: true },
-          { id: "slack", name: "Slack", status: "connected", isConnected: true },
-          { id: "whatsapp", name: "WhatsApp", status: "connected", isConnected: true },
-          { id: "gcal", name: "Google Calendar", status: "connected", isConnected: true },
+          { id: "gmail", name: "Gmail", status: "disconnected", isConnected: false },
+          { id: "slack", name: "Slack", status: "disconnected", isConnected: false },
+          { id: "whatsapp", name: "WhatsApp", status: "disconnected", isConnected: false },
+          { id: "gcal", name: "Google Calendar", status: "disconnected", isConnected: false },
         ],
       },
       { status: 200 }

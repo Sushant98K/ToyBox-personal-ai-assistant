@@ -5,6 +5,8 @@ import { getActiveToolsForUser, executeAgentTool, ALL_TOOLS } from "@/lib/agent/
 
 export const maxDuration = 60; // Allow sufficient time for multi-step tools + streaming
 
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
+
 async function resolveUserId(request: NextRequest): Promise<string> {
   const customUserId = request.headers.get("x-user-id");
   if (customUserId && customUserId !== "undefined" && customUserId !== "null" && customUserId.length > 5) {
@@ -48,7 +50,19 @@ export async function POST(request: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 1. Ensure conversation exists and is active (or create one)
+    // 1. Fetch user's name for personalization
+    let userName = "there";
+    try {
+      const { data: userRec } = await insforgeAdmin
+        .database
+        .from("users")
+        .select("name, profile, email")
+        .eq("id", userId)
+        .maybeSingle();
+      userName = userRec?.name || userRec?.profile?.name || userRec?.email?.split("@")[0] || "there";
+    } catch {}
+
+    // 2. Ensure conversation exists and is active (or create one)
     let currentConversationId = conversationId;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -90,7 +104,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Insert User message into database
+    // 3. Insert User message into database
     await insforgeAdmin
       .database
       .from("agent_messages")
@@ -104,7 +118,7 @@ export async function POST(request: NextRequest) {
         },
       ]);
 
-    // 3. Fetch past conversation messages for context (up to 12 recent messages)
+    // 4. Fetch past conversation messages for context (up to 14 recent messages)
     const { data: pastMessages } = await insforgeAdmin
       .database
       .from("agent_messages")
@@ -113,23 +127,23 @@ export async function POST(request: NextRequest) {
       .order("created_at", { ascending: true })
       .limit(14);
 
-    // 4. Retrieve Active Tools strictly matching connected accounts
+    // 5. Retrieve Active Tools strictly matching connected accounts for this specific user
     const activeTools = await getActiveToolsForUser(userId);
     const connectedPlatformNames = Array.from(new Set(activeTools.map((t) => t.platform))).join(", ");
 
     // System prompt grounding the AI as executive chief of staff
-    const systemInstruction = `You are the ToyBox AI Executive Chief of Staff, an ultra-competent, highly articulate, autonomous executive assistant.
+    const systemInstruction = `You are the ToyBox AI Executive Chief of Staff for ${userName}, an ultra-competent, highly articulate, autonomous executive assistant.
 You have direct read/write access to the user's workspace communications, emails, team channels, and calendars through Model Context Protocol (MCP) tools.
 
-CURRENT ACTIVE CONNECTED PLATFORMS: [${connectedPlatformNames || "Gmail, Google Calendar, Slack"}]
+CURRENT ACTIVE CONNECTED PLATFORMS: [${connectedPlatformNames || "None"}]
 
 STRICT OPERATIONAL DIRECTIVES:
-1. ONLY invoke tools corresponding to currently active, connected user accounts. NEVER hallucinate or invent data for disconnected services.
-2. If the user asks about a platform that is disconnected or not connected (e.g. WhatsApp when disconnected, or Notion), politely inform them that the platform is not yet synced, and advise them to enable it in the Integrations dashboard.
-3. When searching or retrieving information, prioritize high-value executive context: urgent emails requiring sign-off, scheduling conflicts, client proposals, board decks, and unread team messages.
+1. ONLY invoke tools corresponding to currently active, connected user accounts. NEVER hallucinate or invent fake emails, fake calendar meetings, or fake messages for disconnected services.
+2. If the user asks about a platform that is not connected (e.g. Gmail when not connected, WhatsApp when not connected, or Slack), politely inform them that the platform is not yet connected, and direct them to connect it in the Integrations dashboard.
+3. When searching or retrieving information, prioritize high-value executive context: urgent emails, scheduling conflicts, client follow-ups, and unread team messages.
 4. Format your responses with beautiful GitHub Flavored Markdown (use bolding for names and dates, styled bullet lists, concise headers, tables if comparing items).
 5. Be direct, proactive, and concise. Offer clear next steps or action items.
-6. When referencing specific emails, meetings, or Slack threads, clearly mention their key details so the system can render interactive cards for the user.`;
+6. When referencing specific emails, meetings, or Slack messages, clearly describe them so interactive cards and tool inspection can render for the user.`;
 
     // Format function declarations for Gemini
     const functionDeclarations = activeTools.map((tool) => ({
@@ -194,6 +208,14 @@ STRICT OPERATIONAL DIRECTIVES:
 
         const collectedCards: any[] = [];
         const toolsUsed: string[] = [];
+        const collectedToolCalls: Array<{
+          tool_name: string;
+          tool_category: string;
+          integration_name: string;
+          message: string;
+          inputs?: Record<string, unknown>;
+          output?: string;
+        }> = [];
         let fullAssistantText = "";
 
         try {
@@ -205,7 +227,7 @@ STRICT OPERATIONAL DIRECTIVES:
             loopCount++;
 
             const response = await ai.models.generateContent({
-              model: "gemini-3.5-flash-lite",
+              model: GEMINI_MODEL,
               contents: geminiContents,
               config: {
                 systemInstruction,
@@ -220,7 +242,6 @@ STRICT OPERATIONAL DIRECTIVES:
             const functionCalls = response.functionCalls;
 
             if (functionCalls && functionCalls.length > 0) {
-              // Append model's response (with thought signatures preserved)
               if (content) {
                 geminiContents.push(content);
               }
@@ -240,12 +261,40 @@ STRICT OPERATIONAL DIRECTIVES:
                   label: toolLabel,
                 });
 
-                // Execute the tool
+                // Execute the tool with real user credentials
                 const executionResult = await executeAgentTool(callName, fc.args || {}, userId);
 
                 if (executionResult.cards && executionResult.cards.length > 0) {
                   collectedCards.push(...executionResult.cards);
                 }
+
+                const platformCategory = toolDef?.platform || "general";
+                const integrationName =
+                  platformCategory === "gmail"
+                    ? "Gmail"
+                    : platformCategory === "slack"
+                    ? "Slack"
+                    : platformCategory === "gcal" || platformCategory === "calendar"
+                    ? "Google Calendar"
+                    : platformCategory === "whatsapp"
+                    ? "WhatsApp"
+                    : platformCategory;
+
+                const toolCallEntry = {
+                  tool_name: callName,
+                  tool_category: platformCategory === "gcal" ? "google_calendar" : platformCategory,
+                  integration_name: integrationName,
+                  message: executionResult.summary || toolLabel,
+                  inputs: (fc.args as Record<string, unknown>) || {},
+                  output: executionResult.summary,
+                };
+                collectedToolCalls.push(toolCallEntry);
+
+                // Stream tool_call event for the ToolCallsSection component
+                sendEvent({
+                  type: "tool_call",
+                  toolCall: toolCallEntry,
+                });
 
                 // Stream tool_end event to UI
                 sendEvent({
@@ -275,7 +324,7 @@ STRICT OPERATIONAL DIRECTIVES:
 
           // Stream the final conversational response token by token
           const streamResponse = await ai.models.generateContentStream({
-            model: "gemini-3.5-flash-lite",
+            model: GEMINI_MODEL,
             contents: geminiContents,
             config: {
               systemInstruction,
@@ -301,7 +350,7 @@ Response: "${fullAssistantText.slice(0, 500)}"
 Output only JSON array like: ["Action 1", "Action 2", "Action 3"]`;
 
             const fRes = await ai.models.generateContent({
-              model: "gemini-3.5-flash-lite",
+              model: GEMINI_MODEL,
               contents: followupPrompt,
               config: { responseMimeType: "application/json" },
             });
@@ -311,8 +360,7 @@ Output only JSON array like: ["Action 1", "Action 2", "Action 3"]`;
               followups.push(...parsed.slice(0, 3).map((s) => String(s)));
             }
           } catch {
-            // Default smart fallback prompts
-            followups.push("Show only urgent items", "Draft executive reply", "Schedule focus block");
+            followups.push("Show urgent items", "Draft response", "Schedule focus block");
           }
 
           // Send cards event if cards were generated
@@ -326,10 +374,10 @@ Output only JSON array like: ["Action 1", "Action 2", "Action 3"]`;
           // Send dynamic followups
           sendEvent({
             type: "followups",
-            suggestions: followups.length === 3 ? followups : ["Show only urgent items", "Draft response", "Schedule focus time"],
+            suggestions: followups.length === 3 ? followups : ["Show urgent items", "Draft response", "Schedule focus time"],
           });
 
-          // 5. Persist Assistant message to database
+          // 6. Persist Assistant message to database with toolCalls and cards
           const { data: savedMsg } = await insforgeAdmin
             .database
             .from("agent_messages")
@@ -340,6 +388,7 @@ Output only JSON array like: ["Action 1", "Action 2", "Action 3"]`;
                 content: fullAssistantText,
                 metadata: {
                   toolsUsed,
+                  toolCalls: collectedToolCalls,
                   cards: collectedCards,
                   followups,
                 },

@@ -18,6 +18,8 @@ import { MicroCards, MicroCardItem } from "./MicroCards";
 import { TopSummaryBar, SummaryBarData } from "./TopSummaryBar";
 import { QuickPrompts } from "./QuickPrompts";
 import { ChatInputBar } from "./ChatInputBar";
+import { ToolCallsSection, ToolCallEntry } from "@/components/ui/tool-calls-section";
+import { insforge } from "@/lib/insforge";
 
 interface MessageItem {
   id: string;
@@ -26,6 +28,7 @@ interface MessageItem {
   createdAt: string;
   metadata?: {
     toolsUsed?: string[];
+    toolCalls?: ToolCallEntry[];
     cards?: MicroCardItem[];
     followups?: string[];
   };
@@ -39,6 +42,14 @@ interface Connector {
 }
 
 export function ChatInterface() {
+  // Current user state
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    name?: string;
+    email?: string;
+    avatar_url?: string;
+  } | null>(null);
+
   // State
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [input, setInput] = useState("");
@@ -48,7 +59,6 @@ export function ChatInterface() {
   const [activeToolsInFlight, setActiveToolsInFlight] = useState<string[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryBarData | null>(null);
   const [connectors, setConnectors] = useState<Connector[]>([]);
-  const [userId, setUserId] = useState<string>("a727d188-4197-409c-855d-2aa5201cebc7");
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -67,12 +77,44 @@ export function ChatInterface() {
     scrollToBottom(true);
   }, [messages, currentToolLabel, scrollToBottom]);
 
+  // Load authenticated user from InsForge
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const { data } = await insforge.auth.getCurrentUser();
+        if (data?.user) {
+          setCurrentUser({
+            id: data.user.id,
+            name: data.user.profile?.name || data.user.email?.split("@")[0] || "User",
+            email: data.user.email,
+            avatar_url: data.user.profile?.avatar_url,
+          });
+        }
+      } catch (err) {
+        console.warn("Could not retrieve active session:", err);
+      }
+    }
+    loadUser();
+  }, []);
+
   // Load summary and connectors
   useEffect(() => {
     let isMounted = true;
     async function loadSummary() {
       try {
-        const res = await fetch("/api/agent/summary", { cache: "no-store" });
+        const headers: Record<string, string> = {};
+        if (currentUser?.id) {
+          headers["x-user-id"] = currentUser.id;
+        }
+        if (currentUser?.email) {
+          headers["x-user-email"] = currentUser.email;
+        }
+
+        const res = await fetch("/api/agent/summary", {
+          cache: "no-store",
+          headers,
+        });
+
         if (res.ok) {
           const json = await res.json();
           if (isMounted) {
@@ -95,14 +137,26 @@ export function ChatInterface() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   // Fetch or initialize active conversation
   useEffect(() => {
     let isMounted = true;
     async function initConversation() {
       try {
-        const res = await fetch("/api/agent/conversations", { cache: "no-store" });
+        const headers: Record<string, string> = {};
+        if (currentUser?.id) {
+          headers["x-user-id"] = currentUser.id;
+        }
+        if (currentUser?.email) {
+          headers["x-user-email"] = currentUser.email;
+        }
+
+        const res = await fetch("/api/agent/conversations", {
+          cache: "no-store",
+          headers,
+        });
+
         if (res.ok) {
           const json = await res.json();
           if (isMounted && json.conversations && json.conversations.length > 0) {
@@ -110,7 +164,10 @@ export function ChatInterface() {
             setConversationId(activeConv.id);
 
             // Fetch messages for active conversation
-            const msgRes = await fetch(`/api/agent/conversations/${activeConv.id}`, { cache: "no-store" });
+            const msgRes = await fetch(`/api/agent/conversations/${activeConv.id}`, {
+              cache: "no-store",
+              headers,
+            });
             if (msgRes.ok) {
               const msgJson = await msgRes.json();
               if (msgJson.messages && Array.isArray(msgJson.messages) && msgJson.messages.length > 0) {
@@ -129,19 +186,31 @@ export function ChatInterface() {
           }
         }
 
-        // If no messages exist yet, show welcoming chief of staff greeting
+        // If no messages exist yet, show personalized welcoming greeting
         if (isMounted && messages.length === 0) {
+          const hour = new Date().getHours();
+          const greetingTime = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+          const userName = currentUser?.name || currentUser?.email?.split("@")[0] || "there";
+
+          const activeConns = connectors.filter((c) => c.isConnected);
+          const connectedNames = activeConns.map((c) => c.name);
+
+          const connectionDescription =
+            connectedNames.length > 0
+              ? `I am connected to your live workspace integrations (**${connectedNames.join("**, **")}**) with full Model Context Protocol (MCP) tool access.`
+              : `I am ready to manage your schedule and workspace intelligence. You have not connected any integrations yet. Connect **Gmail**, **Google Calendar**, **Slack**, or **WhatsApp** in the Integrations dashboard to unlock autonomous workflows.`;
+
           setMessages([
             {
               id: "welcome_init",
               role: "assistant",
-              content: `Good evening, Alex. I am your **ToyBox AI Chief of Staff**.\n\nI am connected to your live workspace integrations (**Gmail**, **Google Calendar**, and **Slack**) with full Model Context Protocol (MCP) tool access.\n\nHere is how I can assist you right now:\n* **Email Gatekeeper:** Triage urgent emails requiring sign-offs or vendor approvals.\n* **Calendar Negotiator:** Check meeting agendas, resolve conflicts, or schedule focus time.\n* **Team Pulse:** Search Slack discussions, pull executive updates, and draft channel replies.\n\nSelect a suggestion above or ask me any question below.`,
+              content: `${greetingTime}, ${userName}. I am your **ToyBox AI Chief of Staff**.\n\n${connectionDescription}\n\nHere is how I can assist you right now:\n* **Email Gatekeeper:** Triage urgent unread emails and draft executive responses.\n* **Calendar Negotiator:** Check meeting agendas, resolve conflicts, or schedule focus time.\n* **Team Pulse:** Search Slack discussions and monitor incoming priority communications.\n\nSelect a suggestion above or ask me any question below.`,
               createdAt: new Date().toISOString(),
               metadata: {
                 followups: [
-                  "Summarize unread Slack messages",
                   "What meetings do I have today?",
                   "Find urgent emails requiring replies",
+                  "Summarize unread messages",
                 ],
               },
             },
@@ -156,7 +225,7 @@ export function ChatInterface() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser, connectors.length]);
 
   // Handle "New Conversation" action
   const handleNewConversation = async () => {
@@ -164,10 +233,18 @@ export function ChatInterface() {
       abortControllerRef.current.abort();
     }
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (currentUser?.id) {
+      headers["x-user-id"] = currentUser.id;
+    }
+    if (currentUser?.email) {
+      headers["x-user-email"] = currentUser.email;
+    }
+
     try {
       const res = await fetch("/api/agent/conversations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ title: "New Conversation" }),
       });
 
@@ -185,13 +262,13 @@ export function ChatInterface() {
       {
         id: `welcome_${Date.now()}`,
         role: "assistant",
-        content: `Fresh executive thread initiated. All temporary context from earlier has been cleared.\n\nHow can I help coordinate your schedule or communications right now?`,
+        content: `Fresh executive thread initiated. All previous temporary context has been cleared.\n\nHow can I help coordinate your schedule or communications right now?`,
         createdAt: new Date().toISOString(),
         metadata: {
           followups: [
-            "Summarize unread Slack messages",
             "What meetings do I have today?",
             "Find urgent emails requiring replies",
+            "Summarize unread messages",
           ],
         },
       },
@@ -208,7 +285,7 @@ export function ChatInterface() {
     setCurrentToolLabel(null);
   };
 
-  // Core Send Message function (invoked via input bar, prompt chips, follow-up chips, or micro-card actions)
+  // Core Send Message function
   const handleSendMessage = async (textToSend?: string) => {
     const prompt = (textToSend !== undefined ? textToSend : input).trim();
     if (!prompt || isStreaming) return;
@@ -231,6 +308,7 @@ export function ChatInterface() {
       createdAt: new Date().toISOString(),
       metadata: {
         toolsUsed: [],
+        toolCalls: [],
         cards: [],
         followups: [],
       },
@@ -245,12 +323,19 @@ export function ChatInterface() {
     abortControllerRef.current = controller;
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (currentUser?.id) {
+        headers["x-user-id"] = currentUser.id;
+      }
+      if (currentUser?.email) {
+        headers["x-user-email"] = currentUser.email;
+      }
+
       const response = await fetch("/api/agent/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": userId,
-        },
+        headers,
         body: JSON.stringify({
           conversationId,
           message: prompt,
@@ -269,6 +354,7 @@ export function ChatInterface() {
       let streamingText = "";
       const streamedCards: MicroCardItem[] = [];
       const streamedTools: string[] = [];
+      const streamedToolCalls: ToolCallEntry[] = [];
       let streamedFollowups: string[] = [];
 
       while (true) {
@@ -293,12 +379,30 @@ export function ChatInterface() {
                 setActiveToolsInFlight((prev) => [...prev, event.tool]);
               }
 
-              // 2. Tool finished
+              // 2. Structured Tool Call for ToolCallsSection
+              if (event.type === "tool_call" && event.toolCall) {
+                streamedToolCalls.push(event.toolCall);
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantTempId
+                      ? {
+                          ...m,
+                          metadata: {
+                            ...m.metadata,
+                            toolCalls: [...streamedToolCalls],
+                          },
+                        }
+                      : m
+                  )
+                );
+              }
+
+              // 3. Tool finished
               if (event.type === "tool_end") {
                 setCurrentToolLabel(null);
               }
 
-              // 3. Text chunk streamed
+              // 4. Text chunk streamed
               if (event.type === "chunk") {
                 streamingText += event.text;
                 setMessages((prev) =>
@@ -310,6 +414,7 @@ export function ChatInterface() {
                           metadata: {
                             ...m.metadata,
                             toolsUsed: streamedTools,
+                            toolCalls: streamedToolCalls,
                           },
                         }
                       : m
@@ -317,7 +422,7 @@ export function ChatInterface() {
                 );
               }
 
-              // 4. Cards received
+              // 5. Cards received
               if (event.type === "cards" && Array.isArray(event.cards)) {
                 streamedCards.push(...event.cards);
                 setMessages((prev) =>
@@ -328,6 +433,7 @@ export function ChatInterface() {
                           metadata: {
                             ...m.metadata,
                             cards: streamedCards,
+                            toolCalls: streamedToolCalls,
                           },
                         }
                       : m
@@ -335,7 +441,7 @@ export function ChatInterface() {
                 );
               }
 
-              // 5. Dynamic follow-up chips
+              // 6. Dynamic follow-up chips
               if (event.type === "followups" && Array.isArray(event.suggestions)) {
                 streamedFollowups = event.suggestions;
                 setMessages((prev) =>
@@ -346,6 +452,7 @@ export function ChatInterface() {
                           metadata: {
                             ...m.metadata,
                             followups: streamedFollowups,
+                            toolCalls: streamedToolCalls,
                           },
                         }
                       : m
@@ -353,7 +460,7 @@ export function ChatInterface() {
                 );
               }
 
-              // 6. Done event
+              // 7. Done event
               if (event.type === "done") {
                 if (event.conversationId) {
                   setConversationId(event.conversationId);
@@ -394,7 +501,7 @@ export function ChatInterface() {
     <div className="flex flex-col h-full w-full min-w-0 max-w-none text-white overflow-hidden">
       {/* ─── 1. Header Bar ─── */}
       <header className="shrink-0 pb-3 mb-2 border-b border-[#1F2937] flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Left Lockup: Title, Online Green Indicator Badge, Subtitle */}
+        {/* Left Lockup: Title, Online Green Indicator Badge, Model Tag */}
         <div className="space-y-1">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-[652] tracking-tight text-white flex items-center gap-2">
@@ -408,12 +515,12 @@ export function ChatInterface() {
             </div>
 
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#161B22] border border-[#30363D] text-[#9CA3AF] font-mono">
-              gemini-3.5-flash-lite
+              gemini-3.1-flash-lite
             </span>
           </div>
 
           <p className="text-xs text-[#9CA3AF] font-[300]">
-            Live assistant connected to your workspace communications and calendars.
+            Live executive assistant connected to your workspace communications and calendars.
           </p>
         </div>
 
@@ -424,7 +531,7 @@ export function ChatInterface() {
             <span className="text-[#9CA3AF] text-[11px] font-[600]">Connectors:</span>
             <div className="flex items-center gap-1">
               {["gmail", "slack", "whatsapp", "gcal"].map((connId) => {
-                const isConn = connectors.find((c) => c.id === connId)?.isConnected ?? true;
+                const isConn = connectors.find((c) => c.id === connId)?.isConnected ?? false;
                 return (
                   <div
                     key={connId}
@@ -489,7 +596,7 @@ export function ChatInterface() {
 
                   {/* Bubble Content Body */}
                   <div className="space-y-2 min-w-0 flex-1">
-                    {/* Header Row: Agent Name, Timestamp, Tools Used Status Tag */}
+                    {/* Header Row: Agent Name, Timestamp */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-[652] text-white">ToyBox AI</span>
 
@@ -499,18 +606,20 @@ export function ChatInterface() {
                           minute: "2-digit",
                         })}
                       </span>
-
-                      {/* Status Tag: Connected Tools Used */}
-                      {msg.metadata?.toolsUsed && msg.metadata.toolsUsed.length > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#161B22] border border-[#30363D] text-[10px] font-[500] text-[#38BDF8]">
-                          <Wrench className="w-2.5 h-2.5" />
-                          <span>Connected Tools Used ({msg.metadata.toolsUsed.length})</span>
-                        </span>
-                      )}
                     </div>
 
-                    {/* Rich Markdown Response */}
+                    {/* Rich Response Container */}
                     <div className="rounded-[22px] bg-[#0D1117]/80 border border-[#1F2937] p-4 sm:p-5 shadow-xs">
+                      {/* Integrated Tool Calls Section Component */}
+                      {msg.metadata?.toolCalls && msg.metadata.toolCalls.length > 0 && (
+                        <div className="mb-3 pb-2 border-b border-[#1F2937]/70">
+                          <ToolCallsSection
+                            toolCalls={msg.metadata.toolCalls}
+                            defaultExpanded={false}
+                          />
+                        </div>
+                      )}
+
                       {msg.content ? (
                         <MarkdownRenderer content={msg.content} />
                       ) : (
@@ -589,7 +698,7 @@ export function ChatInterface() {
                   {currentToolLabel}
                 </span>
                 <span className="text-[10px] text-[#9CA3AF] block font-[300]">
-                  Model executing verified MCP protocol action...
+                  Executing verified MCP tool on connected workspace...
                 </span>
               </div>
             </div>

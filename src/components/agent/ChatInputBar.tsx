@@ -130,7 +130,7 @@ export function ChatInputBar({
       </div>
 
       <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-[#6B7280]">
-        <span>Powered by Gemini 3.5 Flash-Lite & ToyBox MCP</span>
+        <span>Powered by Gemini 3.1 Flash-Lite & ToyBox MCP</span>
         <span className="hidden sm:inline">Press Enter to send, Shift+Enter for new line</span>
       </div>
     </div>
