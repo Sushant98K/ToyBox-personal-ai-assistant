@@ -32,11 +32,7 @@ const nextConfig: NextConfig = {
         destination: "/dashboard?tab=briefing",
         permanent: false,
       },
-      {
-        source: "/alerts",
-        destination: "/dashboard?tab=alerts",
-        permanent: false,
-      },
+
       {
         source: "/settings",
         destination: "/dashboard?tab=settings",

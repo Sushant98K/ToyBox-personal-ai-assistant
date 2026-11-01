@@ -48,6 +48,8 @@ export default function BriefingsLayout({
       router.push("/briefings");
     } else if (tab === "ai-agent") {
       router.push("/ai-agent");
+    } else if (tab === "alerts") {
+      router.push("/alerts");
     } else {
       router.push(`/dashboard?tab=${tab}`);
     }

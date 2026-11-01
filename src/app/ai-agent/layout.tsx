@@ -48,6 +48,8 @@ export default function AiAgentLayout({
       router.push("/ai-agent");
     } else if (tab === "briefing") {
       router.push("/briefings");
+    } else if (tab === "alerts") {
+      router.push("/alerts");
     } else {
       router.push(`/dashboard?tab=${tab}`);
     }

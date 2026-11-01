@@ -1,21 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Bell,
-  Sparkles,
   RefreshCw,
   Menu,
-  Clock,
-  CheckCircle2,
   ArrowUpRight,
 } from "lucide-react";
 import { DashboardTab, MAIN_NAV_OPTIONS, PRICING_NAV_OPTION } from "../types";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme";
 import { useSidebarSync } from "@/providers";
+import { LiveNotificationFeed } from "@/components/ui/live-notification-feed";
+import { mapAlertsToLiveNotifications } from "@/lib/alerts/notification-mapper";
+import { TriggeredAlert } from "@/types/alerts";
 
 interface DashboardNavbarProps {
   activeTab: DashboardTab;
@@ -34,6 +35,7 @@ export function DashboardNavbar({
   currentUser,
   onQuickSync,
 }: DashboardNavbarProps) {
+  const router = useRouter();
   const {
     systemStatus,
     integrationsCount,
@@ -46,6 +48,116 @@ export function DashboardNavbar({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [liveAlerts, setLiveAlerts] = useState<TriggeredAlert[]>([]);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Load real-time alerts from the backend
+  const loadAlerts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/alerts");
+      if (res.ok) {
+        const data = await res.json();
+        const fetched: TriggeredAlert[] = data.alerts || [];
+        setLiveAlerts(fetched);
+        const unreadCount = fetched.filter(
+          (a) => !a.read && a.status === "active"
+        ).length;
+        setPendingAlertsCount(unreadCount);
+      }
+    } catch (err) {
+      console.warn("Could not load live alerts in navbar:", err);
+    }
+  }, [setPendingAlertsCount]);
+
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
+
+  // Re-fetch when the notification popover is opened
+  useEffect(() => {
+    if (notificationsOpen) {
+      loadAlerts();
+    }
+  }, [notificationsOpen, loadAlerts]);
+
+  // Close flyout when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
+    }
+    if (notificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [notificationsOpen]);
+
+  // Contextual action handling for live notification cards
+  const handleNotificationAction = async (id: string, label: string) => {
+    if (label === "Review") {
+      setNotificationsOpen(false);
+      router.push("/alerts");
+      return;
+    }
+
+    if (label === "Resolve") {
+      try {
+        await fetch("/api/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "resolve_alert", alert_id: id }),
+        });
+        setLiveAlerts((prev) =>
+          prev.map((a) =>
+            a.id === id ? { ...a, status: "resolved", read: true } : a
+          )
+        );
+        setPendingAlertsCount(Math.max(0, pendingAlertsCount - 1));
+      } catch (err) {
+        console.error("Failed to resolve alert:", err);
+      }
+      return;
+    }
+
+    if (label === "Dismiss") {
+      try {
+        await fetch("/api/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "dismiss_alert", alert_id: id }),
+        });
+        setLiveAlerts((prev) => prev.filter((a) => a.id !== id));
+        setPendingAlertsCount(Math.max(0, pendingAlertsCount - 1));
+      } catch (err) {
+        console.error("Failed to dismiss alert:", err);
+      }
+    }
+  };
+
+  const handleNotificationDismiss = async (id: string) => {
+    try {
+      await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss_alert", alert_id: id }),
+      });
+      setLiveAlerts((prev) => prev.filter((a) => a.id !== id));
+      setPendingAlertsCount(Math.max(0, pendingAlertsCount - 1));
+    } catch (err) {
+      console.error("Failed to dismiss alert:", err);
+    }
+  };
+
+  const handleNotificationOpen = (id: string) => {
+    setLiveAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, read: true } : a))
+    );
+    setPendingAlertsCount(Math.max(0, pendingAlertsCount - 1));
+  };
 
   // Find active navigation item title
   const currentNav =
@@ -55,10 +167,13 @@ export function DashboardNavbar({
   const handleSyncClick = () => {
     setIsSyncing(true);
     if (onQuickSync) onQuickSync();
+    loadAlerts();
     setTimeout(() => {
       setIsSyncing(false);
     }, 1000);
   };
+
+  const liveAlertItems = mapAlertsToLiveNotifications(liveAlerts);
 
   return (
     <header className="sticky top-0 z-20 w-full bg-[var(--canvas)]/85 backdrop-blur-md border-b border-[var(--hairline)] transition-colors duration-200">
@@ -162,7 +277,7 @@ export function DashboardNavbar({
           <ThemeToggle variant="inline" />
 
           {/* Notifications Dropdown Button */}
-          <div className="relative">
+          <div className="relative" ref={notificationsRef}>
             <button
               type="button"
               onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -176,87 +291,30 @@ export function DashboardNavbar({
               )}
             </button>
 
-            {/* Notification Quick Drawer Flyout */}
+            {/* Notification Glassmorphic Flyout Popover */}
             {notificationsOpen && (
-              <div className="absolute right-0 mt-2.5 w-80 sm:w-88 rounded-[20px] bg-[var(--canvas-soft)] border border-[var(--hairline)] p-4 shadow-xl z-50 text-[var(--ink)] animate-in fade-in-50 zoom-in-95 duration-150">
-                <div className="flex items-center justify-between pb-2.5 border-b border-[var(--hairline)]">
-                  <div className="flex items-center gap-2">
-                    <span className="font-[652] text-xs text-[var(--ink)]">
-                      Recent Intelligence
-                    </span>
-                    <span
-                      className={cn(
-                        "px-1.5 py-0.5 rounded-full text-[9px] font-bold",
-                        pendingAlertsCount > 0
-                          ? "bg-rose-500/15 text-rose-500"
-                          : "bg-emerald-500/15 text-emerald-500"
-                      )}
-                    >
-                      {pendingAlertsCount > 0
-                        ? `${pendingAlertsCount} Unread`
-                        : "All Caught Up"}
-                    </span>
-                  </div>
-                  {pendingAlertsCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPendingAlertsCount(0)}
-                      className="text-[10px] text-[var(--text-muted)] cursor-pointer hover:underline focus:outline-none"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                </div>
+              <div className="absolute right-0 mt-2.5 w-[360px] sm:w-[420px] rounded-[24px] bg-[var(--canvas-soft)]/95 backdrop-blur-xl border border-[var(--hairline)] p-3 shadow-2xl z-50 text-[var(--ink)] animate-in fade-in-50 zoom-in-95 duration-150">
+                <LiveNotificationFeed
+                  items={liveAlertItems}
+                  title="System & App Alerts"
+                  height="340px"
+                  onAction={handleNotificationAction}
+                  onDismiss={handleNotificationDismiss}
+                  onOpen={handleNotificationOpen}
+                  className="border-0 bg-transparent p-0 shadow-none text-inherit"
+                />
 
-                <div className="py-2 divide-y divide-[var(--hairline-soft)] space-y-2 text-xs">
-                  <div className="pt-2 flex items-start gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-full bg-[var(--raised)] border border-[var(--hairline-soft)] text-rose-500 flex items-center justify-center shrink-0"
-                      style={{ borderRadius: "30%" }}
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <p className="font-[600] text-[var(--ink)] text-xs">
-                        Emergency Board Call Rescheduled
-                      </p>
-                      <p className="text-[var(--text-muted)] text-[11px] mt-0.5">
-                        Slack #executive: Moved to 4:30 PM EST. Conflict resolved.
-                      </p>
-                      <span className="text-[9px] text-[var(--text-faint)] mt-1 block">
-                        8 mins ago
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-start gap-2.5">
-                    <div
-                      className="w-7 h-7 rounded-full bg-[var(--raised)] border border-[var(--hairline-soft)] text-emerald-500 flex items-center justify-center shrink-0"
-                      style={{ borderRadius: "30%" }}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <p className="font-[600] text-[var(--ink)] text-xs">
-                        WhatsApp Autonomous Reply Sent
-                      </p>
-                      <p className="text-[var(--text-muted)] text-[11px] mt-0.5">
-                        Draft approved & sent to Series B Lead Investor regarding NDA revision.
-                      </p>
-                      <span className="text-[9px] text-[var(--text-faint)] mt-1 block">
-                        24 mins ago
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2.5 border-t border-[var(--hairline)] text-center">
+                <div className="pt-2.5 mt-2 border-t border-[var(--hairline)] flex items-center justify-between text-xs">
+                  <span className="text-[10px] text-[var(--text-faint)] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    Trigger.dev 15m condition monitor
+                  </span>
                   <Link
-                    href="#alerts"
+                    href="/alerts"
                     onClick={() => setNotificationsOpen(false)}
                     className="text-[11px] font-[600] text-[#0066FF] hover:underline inline-flex items-center gap-1"
                   >
-                    <span>View all notifications in Alerts tab</span>
+                    <span>View all in Alerts</span>
                     <ArrowUpRight className="w-3 h-3" />
                   </Link>
                 </div>

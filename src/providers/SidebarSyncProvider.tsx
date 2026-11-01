@@ -169,7 +169,21 @@ export function SidebarSyncProvider({ children }: { children: React.ReactNode })
     } catch (err) {
       console.warn("Could not sync live briefing status:", err);
     }
-  }, [setIntegrationsCount]);
+
+    try {
+      // 3. Sync live unread alerts count
+      const alertsRes = await fetch("/api/alerts", { cache: "no-store" });
+      if (alertsRes.ok) {
+        const alertsData = await alertsRes.json();
+        const unreadActive = (alertsData.alerts || []).filter(
+          (a: any) => !a.read && a.status === "active"
+        ).length;
+        setPendingAlertsCount(unreadActive);
+      }
+    } catch (err) {
+      console.warn("Could not sync live alerts count:", err);
+    }
+  }, [setIntegrationsCount, setPendingAlertsCount]);
 
   useEffect(() => {
     refreshSidebarState();

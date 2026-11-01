@@ -109,6 +109,10 @@ export function DashboardShell() {
       router.push("/ai-agent");
       return;
     }
+    if (tab === "alerts") {
+      router.push("/alerts");
+      return;
+    }
     setActiveTab(tab);
     setMobileSidebarOpen(false);
     const params = new URLSearchParams(window.location.search);
