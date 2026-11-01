@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SocialIcon } from "@/components/icons/AppIcons";
+import { useSidebarSync } from "@/providers";
 
 interface AlertItem {
   id: number;
@@ -23,6 +24,7 @@ interface AlertItem {
 }
 
 export function AlertsView() {
+  const { setPendingAlertsCount } = useSidebarSync();
   const [filter, setFilter] = useState<"all" | "critical" | "warning">("all");
   const [alerts, setAlerts] = useState<AlertItem[]>([
     {
@@ -83,6 +85,16 @@ export function AlertsView() {
     );
   };
 
+  const pendingTotal = alerts.filter((a) => a.status === "pending").length;
+  const pendingCritical = alerts.filter(
+    (a) => a.severity === "critical" && a.status === "pending"
+  ).length;
+
+  React.useEffect(() => {
+    // Only urgent/critical alerts show on the sidebar danger badge
+    setPendingAlertsCount(pendingCritical);
+  }, [pendingCritical, setPendingAlertsCount]);
+
   const filteredAlerts = alerts.filter((a) => {
     if (filter === "critical") return a.severity === "critical";
     if (filter === "warning") return a.severity === "warning";
@@ -119,7 +131,7 @@ export function AlertsView() {
                 : "text-[var(--text-muted)] hover:text-[var(--ink)] border-transparent"
             )}
           >
-            All Alerts ({alerts.filter((a) => a.status === "pending").length})
+            All Alerts ({pendingTotal})
           </button>
           <button
             type="button"
@@ -132,7 +144,7 @@ export function AlertsView() {
             )}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            <span>Critical (2)</span>
+            <span>Critical ({pendingCritical})</span>
           </button>
         </div>
       </div>

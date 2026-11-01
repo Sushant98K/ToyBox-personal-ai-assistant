@@ -15,6 +15,7 @@ import {
 import { DashboardTab, MAIN_NAV_OPTIONS, PRICING_NAV_OPTION } from "../types";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme";
+import { useSidebarSync } from "@/providers";
 
 interface DashboardNavbarProps {
   activeTab: DashboardTab;
@@ -33,6 +34,14 @@ export function DashboardNavbar({
   currentUser,
   onQuickSync,
 }: DashboardNavbarProps) {
+  const {
+    systemStatus,
+    integrationsCount,
+    agentRunningTaskLabel,
+    pendingAlertsCount,
+    setPendingAlertsCount,
+  } = useSidebarSync();
+
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -109,13 +118,28 @@ export function DashboardNavbar({
 
         {/* ─── Right Section: Live Agent Pill, Quick Action & User ─── */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Active Agents Beacon Pill */}
+          {/* Live Operational Status Beacon Pill */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--canvas-soft)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)]">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              {systemStatus === "active" && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              )}
+              <span
+                className={cn(
+                  "relative inline-flex rounded-full h-1.5 w-1.5",
+                  systemStatus === "active" || systemStatus === "online"
+                    ? "bg-emerald-500"
+                    : "bg-amber-500"
+                )}
+              />
             </span>
-            <span className="truncate">3 Agents Running</span>
+            <span className="truncate">
+              {systemStatus === "active"
+                ? agentRunningTaskLabel || "Agent Active"
+                : systemStatus === "online"
+                ? `${integrationsCount} Channel${integrationsCount === 1 ? "" : "s"} Synced`
+                : "Fleet Standby"}
+            </span>
           </div>
 
           {/* Quick Sync Action Pill (Primary Mobbin Button) */}
@@ -147,7 +171,9 @@ export function DashboardNavbar({
             >
               <Bell className="w-4 h-4" />
               {/* Unread Alert Pill Badge */}
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[var(--canvas)]" />
+              {pendingAlertsCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[var(--canvas)]" />
+              )}
             </button>
 
             {/* Notification Quick Drawer Flyout */}
@@ -158,13 +184,28 @@ export function DashboardNavbar({
                     <span className="font-[652] text-xs text-[var(--ink)]">
                       Recent Intelligence
                     </span>
-                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/15 text-rose-500">
-                      2 Unread
+                    <span
+                      className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[9px] font-bold",
+                        pendingAlertsCount > 0
+                          ? "bg-rose-500/15 text-rose-500"
+                          : "bg-emerald-500/15 text-emerald-500"
+                      )}
+                    >
+                      {pendingAlertsCount > 0
+                        ? `${pendingAlertsCount} Unread`
+                        : "All Caught Up"}
                     </span>
                   </div>
-                  <span className="text-[10px] text-[var(--text-muted)] cursor-pointer hover:underline">
-                    Mark all read
-                  </span>
+                  {pendingAlertsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingAlertsCount(0)}
+                      className="text-[10px] text-[var(--text-muted)] cursor-pointer hover:underline focus:outline-none"
+                    >
+                      Mark all read
+                    </button>
+                  )}
                 </div>
 
                 <div className="py-2 divide-y divide-[var(--hairline-soft)] space-y-2 text-xs">

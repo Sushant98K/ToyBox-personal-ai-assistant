@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { siteConfig } from "@/config";
-import { ThemeProvider } from "@/providers";
+import { ThemeProvider, SidebarSyncProvider } from "@/providers";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -43,7 +43,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-[var(--canvas)] text-[var(--ink)] font-sans selection:bg-[var(--ink)] selection:text-[var(--canvas)] transition-colors duration-200 relative">
         <ThemeProvider>
-          {children}
+          <SidebarSyncProvider>
+            {children}
+          </SidebarSyncProvider>
         </ThemeProvider>
       </body>
     </html>

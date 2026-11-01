@@ -17,6 +17,7 @@ import {
   NavOption,
 } from "../types";
 import { cn } from "@/lib/utils";
+import { useSidebarSync } from "@/providers";
 
 interface DashboardSidebarProps {
   activeTab: DashboardTab;
@@ -43,15 +44,28 @@ export function DashboardSidebar({
   className,
   badgeOverrides,
 }: DashboardSidebarProps) {
+  const { badgeMap, badgeTypeMap, systemStatus } = useSidebarSync();
+
   const userDisplayName =
     currentUser?.name || currentUser?.email?.split("@")[0] || "Executive";
   const userInitial = userDisplayName.charAt(0).toUpperCase();
 
   const mainNavItems = MAIN_NAV_OPTIONS.map((item) => {
     if (badgeOverrides && badgeOverrides[item.id] !== undefined) {
-      return { ...item, badge: badgeOverrides[item.id] };
+      const override = badgeOverrides[item.id];
+      return {
+        ...item,
+        badge: override || undefined,
+        badgeType: item.badgeType || badgeTypeMap[item.id] || "neutral",
+      };
     }
-    return item;
+    const liveBadge = badgeMap[item.id];
+    const liveBadgeType = badgeTypeMap[item.id];
+    return {
+      ...item,
+      badge: liveBadge,
+      badgeType: liveBadgeType,
+    };
   });
 
   return (
@@ -87,6 +101,18 @@ export function DashboardSidebar({
               className="w-6 h-6 object-contain"
               priority
             />
+            {isCollapsed && (
+              <span
+                className={cn(
+                  "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-[var(--canvas-soft)]",
+                  systemStatus === "active"
+                    ? "bg-emerald-500 animate-pulse"
+                    : systemStatus === "online"
+                    ? "bg-emerald-500"
+                    : "bg-amber-500"
+                )}
+              />
+            )}
           </div>
 
           {!isCollapsed && (
@@ -95,8 +121,23 @@ export function DashboardSidebar({
                 {siteConfig.name}
               </span>
               <span className="text-[10px] font-[500] text-[var(--text-muted)] tracking-normal truncate flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                <span>Autonomous Ops</span>
+                <span
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-200",
+                    systemStatus === "active"
+                      ? "bg-emerald-500 animate-pulse"
+                      : systemStatus === "online"
+                      ? "bg-emerald-500"
+                      : "bg-amber-500"
+                  )}
+                />
+                <span>
+                  {systemStatus === "active"
+                    ? "Ops Running"
+                    : systemStatus === "online"
+                    ? "Autonomous Ops"
+                    : "Fleet Standby"}
+                </span>
               </span>
             </div>
           )}

@@ -17,6 +17,7 @@ import {
 import { DashboardTab } from "../../types";
 import { cn } from "@/lib/utils";
 import { SocialIcon } from "@/components/icons/AppIcons";
+import { useSidebarSync } from "@/providers";
 
 interface PriorityItem {
   id: string;
@@ -57,8 +58,14 @@ export function BriefingView({ currentUser, onNavigateTab }: BriefingViewProps) 
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
 
+  const { markBriefingViewed } = useSidebarSync();
   const currentUserId = currentUser?.id;
   const currentUserEmail = currentUser?.email;
+
+  // Mark briefing as read in sidebar state upon opening
+  useEffect(() => {
+    markBriefingViewed();
+  }, [markBriefingViewed]);
 
   // Clean up any ongoing speech synthesis on unmount
   useEffect(() => {

@@ -14,6 +14,7 @@ import { SettingsView } from "./views/SettingsView";
 import { PricingSettingsView } from "./views/PricingSettingsView";
 import { insforge } from "@/lib/insforge";
 import { cn } from "@/lib/utils";
+import { useSidebarSync } from "@/providers";
 
 export function DashboardShell() {
   const router = useRouter();
@@ -48,18 +49,7 @@ export function DashboardShell() {
     avatar_url?: string;
   } | null>(null);
 
-  // Dynamic synced integrations count for sidebar badge (persisted locally across tab switches)
-  const [syncedCount, setSyncedCount] = useState<number | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem("toybox_synced_integrations_count");
-        if (cached !== null && !isNaN(Number(cached))) {
-          return Number(cached);
-        }
-      } catch {}
-    }
-    return 3;
-  });
+  const { setIntegrationsCount } = useSidebarSync();
 
   // Load user session from InsForge
   useEffect(() => {
@@ -95,12 +85,7 @@ export function DashboardShell() {
           if (data.integrations && Array.isArray(data.integrations)) {
             const count = data.integrations.filter((i: any) => i.status === "connected").length;
             if (isMounted) {
-              setSyncedCount(count);
-              if (typeof window !== "undefined") {
-                try {
-                  localStorage.setItem("toybox_synced_integrations_count", String(count));
-                } catch {}
-              }
+              setIntegrationsCount(count);
             }
           }
         }
@@ -112,7 +97,7 @@ export function DashboardShell() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.id, currentUser?.email, activeTab]);
+  }, [currentUser?.id, currentUser?.email, setIntegrationsCount]);
 
   // Update URL and tab state
   const handleTabChange = (tab: DashboardTab) => {
@@ -142,18 +127,8 @@ export function DashboardShell() {
   };
 
   const handleSyncCountChange = React.useCallback((count: number) => {
-    setSyncedCount((prev) => {
-      if (prev === count) return prev;
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("toybox_synced_integrations_count", String(count));
-        } catch {}
-      }
-      return count;
-    });
-  }, []);
-
-  const badgeOverrides = syncedCount !== null ? { integrations: `${syncedCount} Synced` } : undefined;
+    setIntegrationsCount(count);
+  }, [setIntegrationsCount]);
 
   return (
     <div className="flex h-screen w-full bg-[var(--canvas)] text-[var(--ink)] overflow-hidden transition-colors duration-200">
@@ -166,7 +141,6 @@ export function DashboardShell() {
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
           currentUser={currentUser}
           onSignOut={handleSignOut}
-          badgeOverrides={badgeOverrides}
         />
       </div>
 
@@ -190,7 +164,6 @@ export function DashboardShell() {
               currentUser={currentUser}
               onSignOut={handleSignOut}
               className="w-full h-full border-r-0"
-              badgeOverrides={badgeOverrides}
             />
           </div>
         </div>

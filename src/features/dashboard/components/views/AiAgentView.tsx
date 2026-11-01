@@ -82,6 +82,9 @@ export function AiAgentView() {
     );
   };
 
+  const activeCount = agents.filter((a) => a.status === "active").length;
+  const standbyCount = agents.length - activeCount;
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in-50 duration-200">
       {/* ─── Header Summary ─── */}
@@ -102,8 +105,15 @@ export function AiAgentView() {
 
         <div className="flex items-center gap-3">
           <div className="px-3.5 py-1.5 rounded-full bg-[var(--canvas)] border border-[var(--hairline)] text-xs font-[600] text-[var(--ink)] flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>3 Active • 1 Standby</span>
+            <span
+              className={cn(
+                "w-2 h-2 rounded-full",
+                activeCount > 0 ? "bg-emerald-500" : "bg-amber-500"
+              )}
+            />
+            <span>
+              {activeCount} Active • {standbyCount} Standby
+            </span>
           </div>
         </div>
       </div>

@@ -20,6 +20,7 @@ import { QuickPrompts } from "./QuickPrompts";
 import { ChatInputBar } from "./ChatInputBar";
 import { ToolCallsSection, ToolCallEntry } from "@/components/ui/tool-calls-section";
 import { insforge } from "@/lib/insforge";
+import { useSidebarSync } from "@/providers";
 
 interface MessageItem {
   id: string;
@@ -62,6 +63,29 @@ export function ChatInterface() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { setIsAgentRunning, setIntegrationsCount } = useSidebarSync();
+
+  // Sync active agent running status with sidebar and navbar indicators
+  useEffect(() => {
+    setIsAgentRunning(
+      isStreaming,
+      currentToolLabel || (isStreaming ? "Thinking..." : null)
+    );
+    return () => {
+      setIsAgentRunning(false);
+    };
+  }, [isStreaming, currentToolLabel, setIsAgentRunning]);
+
+  // Sync live connectors count with sidebar when connectors load
+  useEffect(() => {
+    if (connectors && connectors.length > 0) {
+      const connCount = connectors.filter((c) => c.isConnected).length;
+      if (connCount > 0) {
+        setIntegrationsCount(connCount);
+      }
+    }
+  }, [connectors, setIntegrationsCount]);
 
   // Auto-scroll to bottom smoothly on message updates or streaming chunks
   const scrollToBottom = useCallback((smooth = true) => {
